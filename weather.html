@@ -1,0 +1,1334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SailDesk — Weather</title>
+    <script src="/config.js"></script>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css" rel="stylesheet" />
+    <link rel="icon" href="data:,">
+    <style>
+        :root {
+            --navy:    #1B3A5C;
+            --accent:  #2563EB;
+            --font:    system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+            --header:  48px;
+            --timebar: 46px;
+            --drawer-h: 340px;
+            --bg:      #f8fafc;
+            --surface: #ffffff;
+            --border:  #e2e8f0;
+            --muted:   #64748b;
+        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body, html { width: 100%; height: 100%; overflow: hidden; font-family: var(--font); background: #1e293b; }
+
+        /* ── Header ── */
+        .sd-header {
+            display: flex; align-items: center; gap: 1rem;
+            background: var(--navy); padding: 0 1.5rem; height: var(--header);
+            flex-shrink: 0; z-index: 100; position: relative;
+        }
+        .sd-logo { font-size: 1.1rem; font-weight: 800; color: #fff; letter-spacing: -.03em; }
+        .sd-logo span { color: #60A5FA; }
+        .sd-tab-bar { display: flex; gap: .25rem; }
+        .sd-tab {
+            border: none; background: none; color: rgba(255,255,255,.65);
+            padding: .35rem .9rem; border-radius: 6px; font-size: .8rem;
+            font-weight: 600; cursor: pointer; font-family: var(--font);
+            transition: background .15s, color .15s; text-decoration: none; display: inline-flex; align-items: center;
+        }
+        .sd-tab:hover { background: rgba(255,255,255,.1); color: #fff; }
+        .sd-tab.active { background: var(--accent); color: #fff; }
+        .sd-header-time { margin-left: auto; font-size: .7rem; color: rgba(255,255,255,.5); white-space: nowrap; }
+
+        /* ── Layout shell ── */
+        #app { position: absolute; top: var(--header); left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; }
+
+        /* ── Map ── */
+        #map-container {
+            flex: 1; position: relative; overflow: hidden;
+            transition: flex .3s ease;
+        }
+        #map { width: 100%; height: 100%; }
+        #particle-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+
+        /* ── Loading indicator ── */
+        #loading-indicator {
+            position: absolute; top: 10px; left: 10px; z-index: 13;
+            background: rgba(15,23,42,.88); color: #e2e8f0; padding: 8px 14px;
+            font-family: monospace; border-radius: 6px; pointer-events: none;
+            font-size: 12px; box-shadow: 0 4px 20px rgba(0,0,0,.2);
+        }
+
+        /* ── Pin marker ── */
+        .sd-pin {
+            width: 18px; height: 18px; border-radius: 50%;
+            background: rgba(37,99,235,0.25);
+            border: 2.5px solid #2563EB;
+            box-shadow: 0 0 0 2px rgba(255,255,255,0.85), 0 2px 10px rgba(0,0,0,.5);
+            cursor: crosshair;
+        }
+        .sd-pin:active { cursor: crosshair; }
+
+        /* ── Pin popup (Windy-style) ── */
+        #pin-popup {
+            position: absolute; display: none; z-index: 20;
+            background: #1e293b; color: #f1f5f9;
+            border-radius: 10px; padding: 7px 14px 8px;
+            font-family: var(--font); white-space: nowrap;
+            box-shadow: 0 6px 20px rgba(0,0,0,.5);
+            pointer-events: none;
+            transform: translate(-50%, calc(-100% - 18px));
+        }
+        #pin-popup::after {
+            content: ''; position: absolute; bottom: -8px; left: 50%;
+            transform: translateX(-50%);
+            border: 8px solid transparent;
+            border-bottom: none;
+            border-top-color: #1e293b;
+        }
+        .pp-label { font-size: .6rem; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 2px; }
+        .pp-reading { display: flex; align-items: center; gap: 6px; }
+        .pp-speed { font-size: 1.25rem; font-weight: 800; }
+        .pp-unit { font-size: .7rem; color: #94a3b8; font-weight: 600; margin-left: -3px; }
+        .pp-arrow { font-size: 1rem; display: inline-block; }
+        .pp-dir { font-size: .85rem; color: #94a3b8; font-weight: 600; }
+        #pin-coords {
+            position: absolute; bottom: 8px; left: 10px; z-index: 10;
+            background: rgba(15,23,42,.75); color: #e2e8f0;
+            font-size: 11px; font-family: monospace; padding: 4px 10px;
+            border-radius: 4px; pointer-events: none; letter-spacing: .02em;
+        }
+
+        /* ── Map model pill box ── */
+        #model-pill-box {
+            position: absolute; top: 10px; right: 10px; z-index: 12;
+            background: rgba(30,41,59,.92); backdrop-filter: blur(8px);
+            padding: 8px; border-radius: 12px;
+            display: flex; flex-direction: column; gap: 6px;
+            border: 1px solid rgba(255,255,255,.1); box-shadow: 0 10px 30px rgba(0,0,0,.3);
+        }
+        #source-toggle-zone { display: flex; background: rgba(0,0,0,.25); padding: 2px; border-radius: 6px; margin-bottom: 2px; }
+        .source-btn {
+            flex: 1; background: transparent; border: none; color: #94a3b8; padding: 5px 0;
+            font-size: 10px; font-weight: 800; text-transform: uppercase; border-radius: 4px;
+            cursor: pointer; text-align: center; transition: all .1s;
+        }
+        .source-btn.active { background: #3b82f6; color: #fff; }
+        .model-pill {
+            background: transparent; border: none; color: #94a3b8; padding: 7px 14px;
+            font-size: 11px; font-weight: 700; text-transform: uppercase; border-radius: 6px;
+            cursor: pointer; text-align: left; transition: all .15s; min-width: 150px;
+            display: flex; justify-content: space-between; align-items: center; gap: 6px;
+        }
+        .model-pill:hover { background: rgba(255,255,255,.05); color: #f1f5f9; }
+        .model-pill.active { background: #e2e8f0; color: #0f172a; }
+        .model-res-tag { font-size: 9px; opacity: .8; font-family: monospace; font-weight: 800; }
+        .grib-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; display: none; }
+        .grib-dot.green { background: #22c55e; box-shadow: 0 0 5px rgba(34,197,94,.6); }
+        .grib-dot.red   { background: #ef4444; box-shadow: 0 0 5px rgba(239,68,68,.6); }
+        .model-pill .grib-missing-label { font-size: 9px; color: #f87171; font-weight: 700; display: none; margin-left: auto; text-transform: uppercase; letter-spacing: .03em; }
+
+        /* ── Time bar ── */
+        #time-bar {
+            height: var(--timebar); background: #0f172a; display: flex; align-items: center;
+            gap: 12px; padding: 0 14px; flex-shrink: 0; border-top: 1px solid rgba(255,255,255,.08);
+            z-index: 20; position: relative; overflow: visible;
+        }
+        #play-btn {
+            width: 28px; height: 28px; border-radius: 50%; background: #334155; border: none;
+            color: #e2e8f0; font-size: 12px; cursor: pointer; display: flex; align-items: center;
+            justify-content: center; flex-shrink: 0; transition: background .15s;
+        }
+        #play-btn:hover { background: #475569; }
+        #time-label {
+            font-size: 11px; font-family: monospace; color: #94a3b8; white-space: nowrap;
+            min-width: 130px; flex-shrink: 0;
+        }
+        #time-label strong { color: #e2e8f0; }
+        #slider-wrap { flex: 1; display: flex; flex-direction: column; }
+        #time-slider {
+            width: 100%; -webkit-appearance: none; appearance: none;
+            height: 6px; border-radius: 3px; outline: none; cursor: pointer;
+            background: #334155;
+        }
+        #time-slider::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+            background: #fff; box-shadow: 0 0 6px rgba(0,0,0,.5); cursor: pointer;
+            border: 2px solid #0f172a;
+        }
+        #time-axis { position: relative; height: 18px; margin-top: 2px; }
+        #time-axis .ta-tick {
+            position: absolute; transform: translateX(-50%);
+            font-size: 8.5px; color: #64748b; font-family: monospace;
+            white-space: nowrap; line-height: 1;
+        }
+        #time-axis .ta-tick.ta-day {
+            color: #cbd5e1; font-weight: 700;
+        }
+        #time-axis .ta-tick::before {
+            content: ''; display: block; width: 1px; height: 4px;
+            background: #475569; margin: 0 auto 1px;
+        }
+
+        /* ── Wind scale bar ── */
+        #wind-scale {
+            background: #0a1020; flex-shrink: 0; padding: 4px 14px 5px 56px;
+            border-top: 1px solid rgba(255,255,255,.05);
+        }
+        #wind-scale-bar {
+            height: 10px; border-radius: 3px;
+            background: linear-gradient(to right,
+                #cceeff 0%, #88ddff 6%, #44dd88 12%, #88ee44 18%, #ccee00 24%,
+                #ffcc00 30%, #ff8000 36%, #ff4400 44%, #ff1100 52%,
+                #f04080 62%, #cc44cc 74%, #8822bb 86%, #7700bb 100%);
+        }
+        #wind-scale-labels {
+            display: flex; justify-content: space-between; margin-top: 2px;
+        }
+        #wind-scale-labels span { font-size: 8.5px; color: #94a3b8; font-family: monospace; }
+
+        /* ── Comparison drawer ── */
+        #comparison-drawer {
+            background: var(--surface); border-top: 1px solid var(--border);
+            flex-shrink: 0; overflow: hidden;
+            max-height: 0; transition: max-height .3s ease;
+            display: flex; flex-direction: column; z-index: 15;
+        }
+        #comparison-drawer.open { max-height: var(--drawer-h); }
+
+        #drawer-toolbar {
+            display: flex; align-items: center; gap: .6rem; padding: .45rem .75rem;
+            border-bottom: 1px solid var(--border); background: var(--bg); flex-shrink: 0;
+        }
+        #drawer-toggle {
+            width: 22px; height: 22px; border: 1px solid var(--border); border-radius: 5px;
+            background: var(--surface); cursor: pointer; display: flex; align-items: center;
+            justify-content: center; font-size: 10px; color: var(--muted); flex-shrink: 0;
+            transition: background .15s;
+        }
+        #drawer-toggle:hover { background: var(--border); }
+
+        .tb-label { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+
+        /* Source toggle */
+        .tb-source { display: flex; background: #e2e8f0; border-radius: 5px; padding: 2px; gap: 2px; }
+        .tb-src-btn {
+            border: none; background: transparent; color: var(--muted); padding: .18rem .6rem;
+            font-size: .7rem; font-weight: 700; border-radius: 4px; cursor: pointer; font-family: var(--font);
+        }
+        .tb-src-btn.active { background: var(--navy); color: #fff; }
+
+        /* Hours toggle */
+        .tb-hours { display: flex; background: #e2e8f0; border-radius: 5px; padding: 2px; gap: 2px; }
+        .tb-hr-btn {
+            border: none; background: transparent; color: var(--muted); padding: .18rem .55rem;
+            font-size: .7rem; font-weight: 700; border-radius: 4px; cursor: pointer; font-family: var(--font);
+        }
+        .tb-hr-btn.active { background: var(--accent); color: #fff; }
+
+        /* Metric tabs */
+        .tb-metric { display: flex; background: #e2e8f0; border-radius: 5px; padding: 2px; gap: 2px; }
+        .tb-metric-btn {
+            border: none; background: transparent; color: var(--muted); padding: .18rem .6rem;
+            font-size: .7rem; font-weight: 700; border-radius: 4px; cursor: pointer; font-family: var(--font);
+        }
+        .tb-metric-btn.active { background: #0f172a; color: #fff; }
+
+        /* Model picker */
+        #tbl-models-btn {
+            border: 1px solid var(--border); background: var(--surface); color: var(--navy);
+            padding: .2rem .65rem; border-radius: 5px; font-size: .72rem; font-weight: 700;
+            cursor: pointer; display: flex; align-items: center; gap: .3rem; font-family: var(--font);
+        }
+        #tbl-models-btn:hover { border-color: var(--accent); }
+        #tbl-models-panel {
+            position: fixed; z-index: 200; background: var(--surface);
+            border: 1px solid var(--border); border-radius: 8px;
+            padding: .5rem; display: none; flex-direction: column; gap: .25rem;
+            box-shadow: 0 8px 24px rgba(0,0,0,.12); min-width: 200px;
+        }
+        #tbl-models-panel.open { display: flex; }
+        .tbl-model-row {
+            display: flex; align-items: center; gap: .5rem; padding: .3rem .4rem;
+            border-radius: 5px; cursor: pointer; font-size: .78rem; color: var(--navy);
+        }
+        .tbl-model-row:hover { background: #f1f5f9; }
+        .tbl-model-row input { cursor: pointer; accent-color: var(--accent); }
+        .tbl-model-sub { font-size: .65rem; color: var(--muted); margin-left: auto; }
+
+        #tbl-status { font-size: .7rem; color: var(--muted); margin-left: auto; white-space: nowrap; }
+
+        /* ── Table ── */
+        #drawer-body { flex: 1; overflow: hidden; min-height: 0; }
+        .wx-table-wrap {
+            overflow-x: auto; overflow-y: auto;
+            height: 100%;
+            scroll-behavior: auto; /* JS controls smooth/instant */
+        }
+        /* Always-visible thin scrollbar so user knows it scrolls */
+        .wx-table-wrap::-webkit-scrollbar { height: 5px; width: 5px; }
+        .wx-table-wrap::-webkit-scrollbar-track { background: #e2e8f0; }
+        .wx-table-wrap::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 3px; }
+        .wx-empty-state {
+            padding: 2rem 1.5rem; text-align: center;
+            color: var(--muted); font-size: .85rem;
+        }
+        .wx-wind-table {
+            border-collapse: separate; border-spacing: 0;
+            min-width: max(700px, 100%); width: max-content; font-size: .78rem;
+        }
+        .wx-wind-table thead th {
+            position: sticky; top: 0; z-index: 10;
+            background: var(--bg); border-bottom: 2px solid var(--border);
+            padding: .35rem .2rem; color: var(--muted); font-weight: 600;
+            text-align: center; white-space: pre; line-height: 1.2;
+        }
+        .wx-wind-table thead th.wx-time-col {
+            cursor: pointer;
+        }
+        .wx-wind-table thead th.wx-time-col:hover {
+            background: #e2e8f0; color: var(--navy);
+        }
+        .wx-wind-table thead th.wx-model-col {
+            text-align: left; padding-left: .9rem; min-width: 130px;
+            position: sticky; top: 0; left: 0; z-index: 20;
+            background: var(--bg); border-right: 1px solid var(--border);
+        }
+        .wx-wind-table thead th.wx-day-break {
+            border-left: 2px solid #94a3b8;
+            color: #1B3A5C;
+        }
+        .wx-wind-table tbody td.wx-day-break {
+            border-left: 2px solid #94a3b8;
+        }
+        .wx-wind-table thead th.wx-col-now {
+            background: rgba(37,99,235,.08); outline: 2px solid #2563EB;
+            outline-offset: -2px; color: #2563EB;
+        }
+        .wx-wind-table tbody td {
+            border-bottom: 1px solid var(--border);
+            border-right: 1px solid rgba(180,190,210,.2);
+            padding: 0; text-align: center; height: 62px; width: 66px; min-width: 66px;
+        }
+        .wx-wind-table tbody td.wx-model-cell {
+            position: sticky; left: 0; z-index: 5;
+            background: var(--surface); text-align: left;
+            padding: .35rem .9rem; border-right: 1px solid var(--border); min-width: 130px;
+        }
+        .wx-wind-table tbody td.wx-col-now { outline: 2px solid rgba(37,99,235,.35); outline-offset: -2px; }
+        .wx-model-name { font-weight: 700; font-size: .78rem; color: var(--navy); }
+        .wx-model-sub  { font-size: .63rem; color: var(--muted); margin-top: .1rem; }
+        .wx-cell {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 100%; padding: .15rem; gap: .03rem; cursor: default;
+        }
+        .wx-tws   { font-size: 1rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
+        .wx-arrow { font-size: .85rem; line-height: 1; display: inline-block; }
+        .wx-gust  { font-size: .62rem; font-weight: 600; opacity: .85; }
+        .wx-cape-val  { font-size: 1rem; font-weight: 800; }
+        .wx-cape-tier { font-size: .62rem; }
+        .wx-null  { color: rgba(0,0,0,.25); font-size: .72rem; }
+
+        /* ── Hide Mapbox attribution clutter ── */
+        .mapboxgl-ctrl-logo { display: none !important; }
+        .mapboxgl-ctrl-attrib { display: none !important; }
+
+        /* ── Drawer open/close button ── */
+        #drawer-fab {
+            position: absolute; bottom: 12px; right: 14px; z-index: 13;
+            background: rgba(15,23,42,.85); color: #e2e8f0; border: 1px solid rgba(255,255,255,.15);
+            padding: 6px 14px; border-radius: 20px; font-size: .72rem; font-weight: 700;
+            cursor: pointer; display: flex; align-items: center; gap: 6px;
+            backdrop-filter: blur(6px); font-family: var(--font);
+            transition: background .15s;
+        }
+        #drawer-fab:hover { background: rgba(30,41,59,.95); }
+    </style>
+</head>
+<body>
+
+    <!-- ── Header ── -->
+    <header class="sd-header">
+        <div style="display:flex;align-items:center;gap:.65rem;">
+            <div class="sd-logo">Sail<span>Desk</span></div>
+            <nav class="sd-tab-bar">
+                <button class="sd-tab active" onclick="location.href='/weather'">Weather</button>
+                <button class="sd-tab"        onclick="location.href='/'">Wind Map</button>
+                <button class="sd-tab"        data-tab="briefing">Briefing</button>
+                <button class="sd-tab"        data-tab="seabreeze">Sea Breeze</button>
+                <button class="sd-tab"        data-tab="tactics">Tactics</button>
+                <button class="sd-tab"        data-tab="course">Course</button>
+            </nav>
+        </div>
+        <div class="sd-header-time" id="header-time"></div>
+    </header>
+
+    <div id="app">
+
+        <!-- ── Map ── -->
+        <div id="map-container">
+            <div id="map"></div>
+            <canvas id="particle-canvas"></canvas>
+            <div id="loading-indicator">Connecting to Marine Matrix...</div>
+            <div id="pin-coords">Drop pin on map for forecast</div>
+
+            <!-- Map model pill box -->
+            <div id="model-pill-box">
+                <div id="source-toggle-zone">
+                    <button id="src-api"  class="source-btn active" onclick="switchDataSource('api')">Cloud API</button>
+                    <button id="src-grib" class="source-btn"        onclick="switchDataSource('grib')">Local GRIB</button>
+                </div>
+                <button class="model-pill active" id="pill-ecmwf_ifs" onclick="switchActiveForecastModel('ecmwf_ifs')">
+                    <span>ECMWF</span><span class="model-res-tag">9km</span>
+                    <span class="grib-missing-label">No GRIB</span><span class="grib-dot" id="dot-ecmwf_ifs"></span>
+                </button>
+                <button class="model-pill" id="pill-meteofrance_arome_france_hd" onclick="switchActiveForecastModel('meteofrance_arome_france_hd')">
+                    <span>AROME HD</span><span class="model-res-tag">1.5km</span>
+                    <span class="grib-missing-label">No GRIB</span><span class="grib-dot" id="dot-meteofrance_arome_france_hd"></span>
+                </button>
+                <button class="model-pill" id="pill-lamma_1k" onclick="switchActiveForecastModel('lamma_1k')">
+                    <span>LaMMA</span><span class="model-res-tag">1km</span>
+                    <span class="grib-missing-label">No GRIB</span><span class="grib-dot" id="dot-lamma_1k"></span>
+                </button>
+                <button class="model-pill" id="pill-icon_eu" onclick="switchActiveForecastModel('icon_eu')">
+                    <span>ICON</span><span class="model-res-tag">7km</span>
+                    <span class="grib-missing-label">No GRIB</span><span class="grib-dot" id="dot-icon_eu"></span>
+                </button>
+                <button class="model-pill" id="pill-meteofrance_arpege_europe" onclick="switchActiveForecastModel('meteofrance_arpege_europe')">
+                    <span>ARPEGE</span><span class="model-res-tag">11km</span>
+                    <span class="grib-missing-label">No GRIB</span><span class="grib-dot" id="dot-meteofrance_arpege_europe"></span>
+                </button>
+            </div>
+
+            <!-- Pin popup (Windy-style) -->
+            <div id="pin-popup">
+                <div class="pp-label">Wind</div>
+                <div class="pp-reading">
+                    <span class="pp-speed" id="pp-speed">–</span>
+                    <span class="pp-unit">kt</span>
+                    <span class="pp-arrow" id="pp-arrow" style="display:none">↑</span>
+                    <span class="pp-dir" id="pp-dir"></span>
+                </div>
+            </div>
+
+            <!-- FAB to open/close drawer -->
+            <button id="drawer-fab" onclick="toggleDrawer()">
+                <span id="drawer-fab-icon">▲</span> Compare Models
+            </button>
+        </div>
+
+        <!-- ── Comparison drawer ── -->
+        <div id="comparison-drawer">
+            <div id="drawer-toolbar">
+                <span class="tb-label">Source</span>
+                <div class="tb-source">
+                    <button class="tb-src-btn active" id="tbl-src-om"   onclick="setTableSource('om')">OM</button>
+                    <button class="tb-src-btn"        id="tbl-src-grib" onclick="setTableSource('grib')">GRIB</button>
+                </div>
+
+                <span class="tb-label" style="margin-left:.4rem;">Hours</span>
+                <div class="tb-hours">
+                    <button class="tb-hr-btn active" id="tbl-hr-race" onclick="setHoursMode('race')">Race</button>
+                    <button class="tb-hr-btn"        id="tbl-hr-24"   onclick="setHoursMode('24hr')">24 HR</button>
+                    <button class="tb-hr-btn"        id="tbl-hr-full" onclick="setHoursMode('full')">Full</button>
+                </div>
+
+                <span class="tb-label" style="margin-left:.4rem;">View</span>
+                <div class="tb-metric">
+                    <button class="tb-metric-btn active" id="tbl-metric-wind" onclick="setTableMetric('wind')">Wind</button>
+                    <button class="tb-metric-btn"        id="tbl-metric-cape" onclick="setTableMetric('cape')">CAPE</button>
+                </div>
+
+                <span class="tb-label" style="margin-left:.4rem;">Models</span>
+                <button id="tbl-models-btn" onclick="toggleModelPanel(event)">
+                    <span id="tbl-models-label">3 selected</span> ▾
+                </button>
+
+                <span id="tbl-status">Click the map to place forecast pin</span>
+            </div>
+            <div id="drawer-body">
+                <div class="wx-table-wrap" id="wx-table-wrap">
+                    <div class="wx-empty-state">Place a pin on the map then click <strong>Fetch Data</strong></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Time bar ── -->
+        <div id="time-bar">
+            <button id="play-btn" onclick="togglePlay()" title="Play/Pause">▶</button>
+            <div id="time-label"><strong id="time-display-text">—</strong></div>
+            <div id="slider-wrap">
+                <input type="range" id="time-slider" min="0" max="71" value="0">
+                <div id="time-axis"></div>
+            </div>
+        </div>
+
+        <!-- ── Wind speed scale ── -->
+        <div id="wind-scale">
+            <div id="wind-scale-bar"></div>
+            <div id="wind-scale-labels">
+                <span>0</span><span>5</span><span>8</span><span>10</span>
+                <span>12</span><span>15</span><span>18</span><span>20</span>
+                <span>22</span><span>25</span><span>28</span><span>32</span>
+                <span>36</span><span>40</span><span>50 kt</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Model picker panel (portal, outside app flow) -->
+    <div id="tbl-models-panel">
+        <!-- built by JS -->
+    </div>
+
+    <script>
+    // ═══════════════════════════════════════════════════════════
+    // CONSTANTS
+    // ═══════════════════════════════════════════════════════════
+    const API_BASE = window.location.origin;
+
+    const UX_RESOLUTION_TAGS = {
+        "ecmwf_ifs": "ECMWF 9km Global HRES Horizon",
+        "meteofrance_arome_france_hd": "AROME 1.5km Micro-Coastal Mesh",
+        "lamma_1k": "LaMMA 1km High-Fidelity Regional Mesh",
+        "icon_eu": "ICON 7km High-Resolution European Horizon",
+        "meteofrance_arpege_europe": "ARPEGE 11km Regional Forecast Horizon"
+    };
+
+    const WIND_STOPS = [
+        [0,"#ffffff"],[5,"#ffffff"],[5.5,"#e8f7ff"],[6,"#cceeff"],
+        [7,"#aaddff"],[8,"#88ddff"],[9,"#66ddb8"],[10,"#44dd88"],
+        [11,"#55e066"],[12,"#66e044"],[13,"#88ee44"],[14,"#aaee22"],
+        [15,"#ccee00"],[16,"#eedd00"],[17,"#ffcc00"],[18,"#ffaa00"],
+        [19,"#ff9900"],[20,"#ff8000"],[21,"#ff8800"],[22,"#ff7000"],
+        [23,"#ff6000"],[24,"#ff5500"],[25,"#ff4400"],[26,"#ff3300"],
+        [27,"#ff2200"],[28,"#ff1100"],[29,"#f50000"],[30,"#ee0000"],
+        [31,"#f02060"],[32,"#f04080"],[33,"#f05898"],[34,"#f860aa"],
+        [35,"#ff69b4"],[36,"#f065bb"],[37,"#e060c0"],[38,"#d055c8"],
+        [39,"#bb44cc"],[40,"#cc44cc"],[43,"#aa33cc"],[46,"#8822bb"],
+        [50,"#7700bb"],
+    ];
+
+    const TABLE_OM_MODELS = [
+        { id: "ecmwf_ifs",                   label: "ECMWF",    res: "9km"   },
+        { id: "icon_eu",                      label: "ICON-EU",  res: "7km"   },
+        { id: "meteofrance_arpege_europe",    label: "ARPEGE",   res: "11km"  },
+        { id: "meteofrance_arome_france_hd",  label: "AROME HD", res: "1.5km" },
+    ];
+    const TABLE_GRIB_MODELS = [
+        { id: "ecmwf_ifs",                   label: "ECMWF",    res: "9km"   },
+        { id: "icon_eu",                      label: "ICON",     res: "7km"   },
+        { id: "meteofrance_arpege_europe",    label: "ARPEGE",   res: "11km"  },
+        { id: "meteofrance_arome_france_hd",  label: "AROME HD", res: "1.5km" },
+        { id: "lamma_1k",                     label: "LaMMA",    res: "1km"   },
+    ];
+
+    const ALL_MAP_MODEL_IDS = ['ecmwf_ifs','meteofrance_arome_france_hd','lamma_1k','icon_eu','meteofrance_arpege_europe'];
+    const GRIB_ONLY_MODELS  = ['lamma_1k'];
+
+    // ═══════════════════════════════════════════════════════════
+    // MAP STATE
+    // ═══════════════════════════════════════════════════════════
+    mapboxgl.accessToken = window.MAPBOX_ACCESS_TOKEN;
+
+    const map = new mapboxgl.Map({
+        container: 'map', style: 'mapbox://styles/mapbox/light-v11',
+        center: [6.2, 43.0], zoom: 6.8
+    });
+
+    let metadataHeader = null, timelineTimestamps = [], currentActiveFrameData = null;
+    let currentFrameIdx = 0, activeModelId = "ecmwf_ifs", activeSourceId = "api";
+    let browserSideFrameMatrixCache = {};
+    let weatherCanvas, weatherCtx, weatherImgData;
+    let isRenderingFrame = false;
+    let isPlaying = false, playTimer = null;
+
+    const pCanvas = document.getElementById('particle-canvas');
+    const pCtx    = pCanvas.getContext('2d');
+    let particles = [];
+    const maxParticles = 1400;
+
+    // ═══════════════════════════════════════════════════════════
+    // COLOR HELPERS
+    // ═══════════════════════════════════════════════════════════
+    const colorScale = [
+        { knots: 0,  color: [49,59,96,0]   },
+        { knots: 4,  color: [54,87,150,255] },
+        { knots: 10, color: [64,143,160,255]},
+        { knots: 16, color: [80,165,80,255] },
+        { knots: 22, color: [160,180,50,255]},
+        { knots: 28, color: [230,145,30,255]},
+        { knots: 36, color: [210,40,50,255] },
+        { knots: 50, color: [150,0,80,255]  }
+    ];
+
+    function getWindColorContinuous(speed) {
+        const knots = speed * 1.94384;
+        if (knots <= colorScale[0].knots) return colorScale[0].color;
+        if (knots >= colorScale[colorScale.length-1].knots) return colorScale[colorScale.length-1].color;
+        for (let i = 0; i < colorScale.length-1; i++) {
+            const lo = colorScale[i], hi = colorScale[i+1];
+            if (knots >= lo.knots && knots <= hi.knots) {
+                const t = (knots - lo.knots) / (hi.knots - lo.knots);
+                return [lo.color[0]+t*(hi.color[0]-lo.color[0]), lo.color[1]+t*(hi.color[1]-lo.color[1]),
+                        lo.color[2]+t*(hi.color[2]-lo.color[2]), lo.color[3]+t*(hi.color[3]-lo.color[3])];
+            }
+        }
+        return [0,0,0,0];
+    }
+
+    function lerpHex(c0,c1,t) {
+        const r0=parseInt(c0.slice(1,3),16),g0=parseInt(c0.slice(3,5),16),b0=parseInt(c0.slice(5,7),16);
+        const r1=parseInt(c1.slice(1,3),16),g1=parseInt(c1.slice(3,5),16),b1=parseInt(c1.slice(5,7),16);
+        const r=Math.round(r0+(r1-r0)*t),g=Math.round(g0+(g1-g0)*t),b=Math.round(b0+(b1-b0)*t);
+        return `#${r.toString(16).padStart(2,"0")}${g.toString(16).padStart(2,"0")}${b.toString(16).padStart(2,"0")}`;
+    }
+    function windColor(tws) {
+        if (tws == null) return "#f8fafc";
+        if (tws <= 0) return WIND_STOPS[0][1];
+        for (let i = 1; i < WIND_STOPS.length; i++) {
+            const [s0,c0]=WIND_STOPS[i-1],[s1,c1]=WIND_STOPS[i];
+            if (tws <= s1) return lerpHex(c0,c1,(tws-s0)/(s1-s0));
+        }
+        return WIND_STOPS[WIND_STOPS.length-1][1];
+    }
+    function contrastColor(hex) {
+        const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+        return (0.299*r+0.587*g+0.114*b) > 140 ? "#1B3A5C" : "#ffffff";
+    }
+    function capeColor(cape) {
+        if (cape==null||cape<100) return "#eef9f3";
+        if (cape<500) return "#fff6df";
+        return "#fff0f0";
+    }
+    function capeTier(cape) {
+        if (cape==null) return "–";
+        if (cape<100) return "low";
+        if (cape<500) return "mod";
+        return "HIGH";
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // MAP WIND LAYER
+    // ═══════════════════════════════════════════════════════════
+    function findClosestTimeIndex(timestamps) {
+        if (!timestamps||!timestamps.length) return 0;
+        const now = new Date(); let idx=0,min=Infinity;
+        for (let i=0;i<timestamps.length;i++) {
+            let s=timestamps[i];
+            if (s&&!s.endsWith("Z")&&!s.includes("+")) s+="Z";
+            const d=Math.abs(now-new Date(s));
+            if (d<min){min=d;idx=i;}
+        }
+        return idx;
+    }
+
+    function getInterpolatedWind(lng,lat) {
+        if (!metadataHeader||!currentActiveFrameData) return {u:0,v:0,speed:0};
+        const h=metadataHeader;
+        const maxLng=h.lo1+(h.dx*(h.nx-1)), minLat=h.la1-(h.dy*(h.ny-1));
+        if (lat>h.la1||lat<minLat||lng<h.lo1||lng>maxLng) return {u:0,v:0,speed:0};
+        let x=(lng-h.lo1)/h.dx, y=(h.la1-lat)/h.dy;
+        let x0=Math.floor(x),x1=Math.min(x0+1,h.nx-1),y0=Math.floor(y),y1=Math.min(y0+1,h.ny-1);
+        let xt=x-x0,yt=y-y0;
+        x0=Math.max(0,Math.min(x0,h.nx-1));x1=Math.max(0,Math.min(x1,h.nx-1));
+        y0=Math.max(0,Math.min(y0,h.ny-1));y1=Math.max(0,Math.min(y1,h.ny-1));
+        const u=((1-yt)*((1-xt)*(currentActiveFrameData.uData?.[y0]?.[x0]??0)+xt*(currentActiveFrameData.uData?.[y0]?.[x1]??0))
+                +yt*((1-xt)*(currentActiveFrameData.uData?.[y1]?.[x0]??0)+xt*(currentActiveFrameData.uData?.[y1]?.[x1]??0)));
+        const v=((1-yt)*((1-xt)*(currentActiveFrameData.vData?.[y0]?.[x0]??0)+xt*(currentActiveFrameData.vData?.[y0]?.[x1]??0))
+                +yt*((1-xt)*(currentActiveFrameData.vData?.[y1]?.[x0]??0)+xt*(currentActiveFrameData.vData?.[y1]?.[x1]??0)));
+        return {u,v,speed:Math.sqrt(u*u+v*v)};
+    }
+
+    function latToMercY(lat){return Math.log(Math.tan(Math.PI/4+(lat*Math.PI/180)/2));}
+    function mercYToLat(y){return (2*Math.atan(Math.exp(y))-Math.PI/2)*180/Math.PI;}
+
+    function renderCurrentFrameToCanvas() {
+        return new Promise(resolve => {
+            if (!metadataHeader||!currentActiveFrameData||!weatherCanvas){resolve();return;}
+            if (isRenderingFrame){resolve();return;}
+            isRenderingFrame=true;
+            setTimeout(()=>{
+                if (!metadataHeader||!currentActiveFrameData?.uData){isRenderingFrame=false;resolve();return;}
+                try {
+                    const h=metadataHeader, tw=weatherCanvas.width, th=weatherCanvas.height;
+                    const totalLng=h.dx*(h.nx-1), botLat=h.la1-h.dy*(h.ny-1);
+                    const mTop=latToMercY(h.la1), mBot=latToMercY(botLat);
+                    let p=0;
+                    for (let y=0;y<th;y++) {
+                        const lat=mercYToLat(mTop-(y/(th-1))*(mTop-mBot));
+                        for (let x=0;x<tw;x++) {
+                            const lng=h.lo1+(x/(tw-1))*totalLng;
+                            const c=getWindColorContinuous(getInterpolatedWind(lng,lat).speed);
+                            weatherImgData.data[p]=Math.round(c[0]);weatherImgData.data[p+1]=Math.round(c[1]);
+                            weatherImgData.data[p+2]=Math.round(c[2]);weatherImgData.data[p+3]=Math.round(c[3]);p+=4;
+                        }
+                    }
+                    weatherCtx.clearRect(0,0,tw,th);weatherCtx.putImageData(weatherImgData,0,0);map.triggerRepaint();
+                } catch(e){} finally {isRenderingFrame=false;resolve();}
+            },0);
+        });
+    }
+
+    function resizeParticleCanvas(){const c=document.getElementById('map-container');pCanvas.width=c.offsetWidth;pCanvas.height=c.offsetHeight;}
+    function initParticlePool(){particles=[];for(let i=0;i<maxParticles;i++)particles.push({x:Math.random()*pCanvas.width,y:Math.random()*pCanvas.height,age:Math.floor(Math.random()*55)});}
+
+    function runningParticleLoop(){
+        if(!pCtx) return; requestAnimationFrame(runningParticleLoop);
+        if(!metadataHeader||!currentActiveFrameData?.uData||!particles.length){pCtx.clearRect(0,0,pCanvas.width,pCanvas.height);return;}
+        pCtx.globalCompositeOperation='destination-in';pCtx.fillStyle='rgba(0,0,0,0.90)';pCtx.fillRect(0,0,pCanvas.width,pCanvas.height);
+        pCtx.globalCompositeOperation='source-over';pCtx.strokeStyle='rgba(255,255,255,0.75)';pCtx.lineWidth=2.2;
+        const z=map.getZoom(),vs=0.075/Math.sqrt(z-3||1),vc=Math.min(maxParticles,Math.round(maxParticles*(6/z)));
+        for(let i=0;i<vc;i++){
+            let p=particles[i]; if(!p) continue;
+            if(isNaN(p.x)||p.x<0||p.x>pCanvas.width||p.y<0||p.y>pCanvas.height){p.x=Math.random()*pCanvas.width;p.y=Math.random()*pCanvas.height;p.age=0;continue;}
+            let ll; try{ll=map.unproject([p.x,p.y]);}catch(e){p.x=Math.random()*pCanvas.width;p.y=Math.random()*pCanvas.height;p.age=0;continue;}
+            const w=getInterpolatedWind(ll.lng,ll.lat); let u=w.u,v=w.v,sk=w.speed*1.94384;
+            if(sk<4&&sk>0.1){const b=4/sk;u*=b;v*=b;}
+            if(w.speed<=0.1||p.age>65){p.x=Math.random()*pCanvas.width;p.y=Math.random()*pCanvas.height;p.age=0;continue;}
+            const nx=p.x+(u*vs*3.6),ny=p.y-(v*vs*3.6);
+            if(!isNaN(nx)&&!isNaN(ny)){pCtx.beginPath();pCtx.moveTo(p.x,p.y);pCtx.lineTo(nx,ny);pCtx.stroke();}
+            p.x=nx;p.y=ny;p.age++;
+        }
+    }
+
+    function applyMarineThemeOverlays(labelLayerId,coastlineId){
+        const style=map.getStyle();if(!style||!style.layers) return;
+        for(const layer of style.layers){
+            if(layer.id.includes('landcover')||layer.id.includes('national_park')||layer.id.includes('road')) map.setLayoutProperty(layer.id,'visibility','none');
+            if(layer.id==='background'||layer.id.includes('land')||layer.id.includes('landuse')){
+                if(layer.type==='background') map.setPaintProperty(layer.id,'background-color','rgba(74,91,107,0.78)');
+                if(layer.type==='fill') map.setPaintProperty(layer.id,'fill-color','rgba(74,91,107,0.78)');
+            }
+            if(layer.type==='symbol'){try{map.setPaintProperty(layer.id,'text-color','#ffffff');map.setPaintProperty(layer.id,'text-halo-color','rgba(15,23,42,0.95)');map.setPaintProperty(layer.id,'text-halo-width',1.8);}catch(e){}}
+        }
+        if(!map.getLayer(coastlineId)) map.addLayer({id:coastlineId,type:'line',source:'composite','source-layer':'water',paint:{'line-color':'#11151c','line-width':1.2,'line-opacity':0.95}},labelLayerId);
+    }
+
+    const WX_CANVAS_ID='weather-canvas-main',WX_SOURCE_ID='weather-source-main',WX_LAYER_ID='weather-layer-main',WX_COAST_ID='crisp-coastlines-main';
+
+    function initWeatherCanvas(){
+        let c=document.getElementById(WX_CANVAS_ID);
+        if(!c){c=document.createElement('canvas');c.id=WX_CANVAS_ID;c.width=1600;c.height=1000;c.style.display='none';document.body.appendChild(c);}
+        weatherCanvas=c;weatherCtx=weatherCanvas.getContext('2d',{willReadFrequently:true});weatherImgData=weatherCtx.createImageData(weatherCanvas.width,weatherCanvas.height);
+    }
+
+    function mountOrUpdateWeatherLayer(){
+        if(!metadataHeader) return;
+        const h=metadataHeader;
+        const coords=[[h.lo1,h.la1],[h.lo1+h.dx*(h.nx-1),h.la1],[h.lo1+h.dx*(h.nx-1),h.la1-h.dy*(h.ny-1)],[h.lo1,h.la1-h.dy*(h.ny-1)]];
+        if(map.getSource(WX_SOURCE_ID)){map.getSource(WX_SOURCE_ID).setCoordinates(coords);}
+        else{
+            const layers=map.getStyle().layers;let lbl;
+            for(let i=0;i<layers.length;i++){if(layers[i].type==='symbol'){lbl=layers[i].id;break;}}
+            map.addSource(WX_SOURCE_ID,{type:'canvas',canvas:WX_CANVAS_ID,animate:true,coordinates:coords});
+            map.addLayer({id:WX_LAYER_ID,type:'raster',source:WX_SOURCE_ID,paint:{'raster-opacity':0.88,'raster-resampling':'linear'}},lbl);
+            applyMarineThemeOverlays(lbl,WX_COAST_ID);
+        }
+        const src=map.getSource(WX_SOURCE_ID);if(src) src.play();map.triggerRepaint();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // TIME SLIDER
+    // ═══════════════════════════════════════════════════════════
+    function updateTimeDisplay(instant=false){
+        if(!timelineTimestamps||!timelineTimestamps[currentFrameIdx]) return;
+        let s=timelineTimestamps[currentFrameIdx];
+        if(s&&!s.endsWith("Z")&&!s.includes("+")) s+="Z";
+        const d=new Date(s);
+        document.getElementById('time-display-text').textContent=isNaN(d)?`Step ${currentFrameIdx}`:d.toLocaleString('en-US',{timeZone:'Europe/Rome',weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})+' CEST';
+        updateTableHighlight(instant);
+    }
+
+    function buildTimeAxis(){
+        const ax=document.getElementById('time-axis');
+        if(!timelineTimestamps||timelineTimestamps.length<2){ax.innerHTML='';return;}
+        ax.innerHTML='';
+        const total=timelineTimestamps.length-1;
+        // Pick tick interval: every 6h if <=5 days, else every 12h
+        const spanHours=total; // each step is ~1h
+        const stepH = spanHours <= 120 ? 6 : 12;
+
+        timelineTimestamps.forEach((s,i)=>{
+            let ts=s; if(ts&&!ts.endsWith('Z')&&!ts.includes('+')) ts+='Z';
+            const d=new Date(ts);
+            const h=cestHour(d);
+            const romStr=d.toLocaleString('sv',{timeZone:'Europe/Rome'});
+            const m=parseInt(romStr.split(' ')[1].split(':')[1]);
+            if(m!==0) return;             // only on the hour
+            if(h % stepH !== 0) return;   // only every stepH hours
+
+            const pct=(i/total)*100;
+            const span=document.createElement('span');
+            span.className='ta-tick'+(h===0?' ta-day':'');
+            span.style.left=pct+'%';
+            span.textContent = h===0
+                ? d.toLocaleString('en-US',{timeZone:'Europe/Rome',weekday:'short'})
+                : String(h).padStart(2,'0');
+            ax.appendChild(span);
+        });
+    }
+
+    function togglePlay(){
+        isPlaying=!isPlaying;
+        document.getElementById('play-btn').textContent=isPlaying?'⏸':'▶';
+        if(isPlaying) advancePlay();
+    }
+    function advancePlay(){
+        if(!isPlaying) return;
+        currentFrameIdx=(currentFrameIdx+1)%Math.max(1,timelineTimestamps.length);
+        document.getElementById('time-slider').value=currentFrameIdx;
+        streamIsolatedFrame(currentFrameIdx).then(()=>renderCurrentFrameToCanvas());
+        playTimer=setTimeout(advancePlay,800);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // MODEL SYNC
+    // ═══════════════════════════════════════════════════════════
+    async function executeSlicedModelSync(){
+        setModelDot(activeModelId,'loading');
+        try {
+            const r=await fetch(`${API_BASE}/api/weather/metadata?model=${activeModelId}&source=${activeSourceId}`);
+            const d=await r.json(); if(d.error) throw new Error(d.error);
+            const ph=d.header; timelineTimestamps=d.timestamps;
+            const sl=document.getElementById('time-slider');
+            sl.max=timelineTimestamps.length-1;
+            currentFrameIdx=findClosestTimeIndex(timelineTimestamps);sl.value=currentFrameIdx;
+            const pf=await streamIsolatedFramePending(currentFrameIdx);
+            metadataHeader=ph;currentActiveFrameData=pf;
+            updateTimeDisplay();buildTimeAxis();
+            initWeatherCanvas();await renderCurrentFrameToCanvas();mountOrUpdateWeatherLayer();
+            document.getElementById('loading-indicator').style.display='none';
+            setModelDot(activeModelId,'loaded');triggerBackgroundCacheWarmup();
+        } catch(e){
+            document.getElementById('loading-indicator').style.color='#ff3333';
+            document.getElementById('loading-indicator').innerText='Sync Mismatch Error';
+            setModelDot(activeModelId,'error');
+        }
+    }
+
+    async function streamIsolatedFramePending(idx){
+        const k=`${activeModelId}_${activeSourceId}_frame_${idx}`;
+        if(browserSideFrameMatrixCache[k]) return browserSideFrameMatrixCache[k];
+        const r=await fetch(`${API_BASE}/api/weather/frame?model=${activeModelId}&source=${activeSourceId}&frame=${idx}`);
+        const d=await r.json();browserSideFrameMatrixCache[k]=d;return d;
+    }
+    async function streamIsolatedFrame(idx){
+        updateTimeDisplay();
+        const k=`${activeModelId}_${activeSourceId}_frame_${idx}`;
+        if(browserSideFrameMatrixCache[k]){currentActiveFrameData=browserSideFrameMatrixCache[k];return;}
+        const r=await fetch(`${API_BASE}/api/weather/frame?model=${activeModelId}&source=${activeSourceId}&frame=${idx}`);
+        const d=await r.json();browserSideFrameMatrixCache[k]=d;currentActiveFrameData=d;
+    }
+    async function triggerBackgroundCacheWarmup(){
+        const m=activeModelId,s=activeSourceId;
+        for(let f=0;f<timelineTimestamps.length;f++){
+            if(m!==activeModelId||s!==activeSourceId) break;
+            const k=`${m}_${s}_frame_${f}`;
+            if(!browserSideFrameMatrixCache[k]){
+                try{const r=await fetch(`${API_BASE}/api/weather/frame?model=${m}&source=${s}&frame=${f}`);
+                    const d=await r.json();browserSideFrameMatrixCache[k]=d;await new Promise(res=>setTimeout(res,60));}catch(e){}
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // DOT SYSTEM
+    // ═══════════════════════════════════════════════════════════
+    const clientRenderedModels=new Set();
+
+    function applyDot(modelId,state){
+        const dot=document.getElementById(`dot-${modelId}`),pill=document.getElementById(`pill-${modelId}`);
+        if(!dot||!pill) return;
+        const ml=pill.querySelector('.grib-missing-label');
+        dot.style.background='';dot.style.boxShadow='';
+        if(state==='none'){dot.style.display='none';if(ml) ml.style.display='none';}
+        else if(state==='missing'){dot.style.display='none';if(ml) ml.style.display='inline';}
+        else if(state==='loading'){dot.className='grib-dot';dot.style.background='#f59e0b';dot.style.boxShadow='0 0 5px rgba(245,158,11,.7)';dot.style.display='block';if(ml) ml.style.display='none';}
+        else if(state==='loaded'){dot.className='grib-dot green';dot.style.display='block';if(ml) ml.style.display='none';}
+        else if(state==='error'){dot.className='grib-dot red';dot.style.display='block';if(ml) ml.style.display='none';}
+    }
+    function setModelDot(modelId,state){if(state==='loaded') clientRenderedModels.add(`${modelId}_${activeSourceId}`);applyDot(modelId,state);}
+    function isRendered(modelId){return clientRenderedModels.has(`${modelId}_${activeSourceId}`);}
+    function initAllDotsRed(){ALL_MAP_MODEL_IDS.forEach(id=>{const p=document.getElementById(`pill-${id}`);if(p&&p.style.display!=='none') applyDot(id,'error');});}
+    async function refreshAllDots(){
+        if(activeSourceId==='grib'){
+            try{const r=await fetch(`${API_BASE}/api/weather/grib-status`);const s=await r.json();
+                for(const[id,info] of Object.entries(s)){if(info.status==='missing') applyDot(id,'missing');else if(isRendered(id)) applyDot(id,'loaded');else applyDot(id,'error');}
+            }catch(e){}
+        } else {
+            ALL_MAP_MODEL_IDS.forEach(id=>{const p=document.getElementById(`pill-${id}`);if(!p||p.style.display==='none') return;applyDot(id,isRendered(id)?'loaded':'error');});
+        }
+    }
+
+    function applySourceVisibility(){
+        const isGrib=activeSourceId==='grib';
+        GRIB_ONLY_MODELS.forEach(id=>{
+            const p=document.getElementById(`pill-${id}`);if(!p) return;
+            p.style.display=isGrib?'':'none';
+            if(!isGrib&&activeModelId===id){document.getElementById('pill-ecmwf_ifs').classList.add('active');p.classList.remove('active');activeModelId='ecmwf_ifs';}
+        });
+    }
+
+    async function switchDataSource(src){
+        if(src===activeSourceId) return;
+        browserSideFrameMatrixCache={};
+        document.querySelectorAll('.source-btn').forEach(b=>b.classList.remove('active'));
+        document.getElementById(`src-${src}`).classList.add('active');
+        activeSourceId=src;applySourceVisibility();await refreshAllDots();await executeSlicedModelSync();
+    }
+    async function switchActiveForecastModel(name){
+        if(name===activeModelId) return;
+        browserSideFrameMatrixCache={};
+        document.querySelectorAll('.model-pill').forEach(p=>p.classList.remove('active'));
+        document.getElementById(`pill-${name}`).classList.add('active');
+        activeModelId=name;await executeSlicedModelSync();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // PIN
+    // ═══════════════════════════════════════════════════════════
+    let pinMarker = null;
+    let pinLat = 43.0, pinLon = 6.2;
+
+    function loadPinLocation(){
+        try{const s=localStorage.getItem('saildesk_pin');if(s){const o=JSON.parse(s);pinLat=o.lat;pinLon=o.lon;}}catch(e){}
+    }
+    function savePinLocation(){
+        try{localStorage.setItem('saildesk_pin',JSON.stringify({lat:pinLat,lon:pinLon}));}catch(e){}
+    }
+    function updatePinCoords(){
+        const lat=Math.abs(pinLat).toFixed(4)+(pinLat>=0?'N':'S');
+        const lon=Math.abs(pinLon).toFixed(4)+(pinLon>=0?'E':'W');
+        document.getElementById('pin-coords').textContent=`📍 ${lat}  ${lon}`;
+    }
+
+    function updatePinPopup(){
+        const popup=document.getElementById('pin-popup');
+        if(!popup) return;
+        // Get pixel position of pin on screen
+        const pt=map.project([pinLon,pinLat]);
+        popup.style.left=pt.x+'px';
+        popup.style.top=pt.y+'px';
+
+        // Wind data from interpolated frame
+        const w=getInterpolatedWind(pinLon,pinLat);
+        const kts=(w.speed*1.94384);
+        document.getElementById('pp-speed').textContent=isFinite(kts)&&kts>0.1?Math.round(kts):'–';
+
+        if(w.u!==0||w.v!==0){
+            // twd = direction wind is blowing FROM (meteorological)
+            const twd=(Math.atan2(-w.u,-w.v)*180/Math.PI+360)%360;
+            const arrow=document.getElementById('pp-arrow');
+            arrow.style.display='inline-block';
+            arrow.style.transform=`rotate(${(twd+180)%360}deg)`;
+            document.getElementById('pp-dir').textContent=Math.round(twd)+'°';
+        } else {
+            document.getElementById('pp-arrow').style.display='none';
+            document.getElementById('pp-dir').textContent='';
+        }
+        popup.style.display='block';
+    }
+
+    function initPin(){
+        loadPinLocation();
+        const el=document.createElement('div');el.className='sd-pin';
+        pinMarker=new mapboxgl.Marker({element:el,anchor:'center',draggable:true}).setLngLat([pinLon,pinLat]).addTo(map);
+        updatePinCoords();
+        pinMarker.on('drag',()=>{
+            const ll=pinMarker.getLngLat();pinLat=ll.lat;pinLon=ll.lng;
+            updatePinPopup();
+        });
+        pinMarker.on('dragend',()=>{
+            const ll=pinMarker.getLngLat();pinLat=ll.lat;pinLon=ll.lng;
+            savePinLocation();updatePinCoords();updatePinPopup();scheduleTableRefresh(0);
+        });
+        map.on('click',e=>{
+            pinLat=e.lngLat.lat;pinLon=e.lngLat.lng;
+            pinMarker.setLngLat([pinLon,pinLat]);
+            savePinLocation();updatePinCoords();updatePinPopup();scheduleTableRefresh(0);
+        });
+        // Keep popup position synced when map pans/zooms
+        map.on('move',()=>{ if(document.getElementById('pin-popup').style.display==='block') updatePinPopup(); });
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // COMPARISON TABLE STATE
+    // ═══════════════════════════════════════════════════════════
+    let tableSource = 'om';
+    let tableMetric = 'wind';
+    let tableHoursMode = 'race';
+    let tableData = {};
+    let selectedTableModels = new Set(['ecmwf_ifs','icon_eu','meteofrance_arpege_europe','meteofrance_arome_france_hd']);
+    let tableRefreshTimer = null;
+    let drawerOpen = false;
+
+    function setTableSource(src){
+        tableSource=src;
+        document.getElementById('tbl-src-om').classList.toggle('active',src==='om');
+        document.getElementById('tbl-src-grib').classList.toggle('active',src==='grib');
+        rebuildModelPanel();
+        if(drawerOpen) fetchTableData();
+    }
+    function setHoursMode(mode){
+        tableHoursMode=mode;
+        document.getElementById('tbl-hr-race').classList.toggle('active',mode==='race');
+        document.getElementById('tbl-hr-24').classList.toggle('active',mode==='24hr');
+        document.getElementById('tbl-hr-full').classList.toggle('active',mode==='full');
+        renderTable();
+        updateTableHighlight(true);
+    }
+    function setTableMetric(m){
+        tableMetric=m;
+        document.getElementById('tbl-metric-wind').classList.toggle('active',m==='wind');
+        document.getElementById('tbl-metric-cape').classList.toggle('active',m==='cape');
+        renderTable();
+    }
+
+    function scheduleTableRefresh(delay=300){
+        if(tableRefreshTimer) clearTimeout(tableRefreshTimer);
+        tableRefreshTimer=setTimeout(fetchTableData,delay);
+    }
+
+    async function fetchTableData(){
+        if(!selectedTableModels.size) return;
+        document.getElementById('tbl-status').textContent='Fetching…';
+        try {
+            const models=[...selectedTableModels];
+            if(tableSource==='om'){
+                // Direct point forecast from Open-Meteo — fast single-point call, 5 days
+                const resp=await fetch(`${API_BASE}/api/weather/om`,{
+                    method:'POST',headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({lat:pinLat,lon:pinLon,models})
+                });
+                const data=await resp.json();
+                tableData={};
+                for(const[id,res] of Object.entries(data)){
+                    if(res.error||!res.data||!res.data.length) continue;
+                    const info=TABLE_OM_MODELS.find(m=>m.id===id);
+                    tableData[id]={label:info?.label||id,res:info?.res||'',source:'OM',
+                        timestamps:res.data.map(d=>d.timestamp),tws:res.data.map(d=>d.tws),
+                        twd:res.data.map(d=>d.twd),gust:res.data.map(d=>d.gust),cape:res.data.map(d=>d.cape)};
+                }
+            } else {
+                tableData={};
+                await Promise.all(models.map(async id=>{
+                    try{
+                        const r=await fetch(`${API_BASE}/api/weather/point?lat=${pinLat}&lon=${pinLon}&model=${id}&source=grib`);
+                        const res=await r.json();if(res.error||!res.data||!res.data.length) return;
+                        const info=TABLE_GRIB_MODELS.find(m=>m.id===id);
+                        tableData[id]={label:info?.label||id,res:info?.res||'',source:'GRIB',
+                            timestamps:res.data.map(d=>d.timestamp),tws:res.data.map(d=>d.tws),
+                            twd:res.data.map(d=>d.twd),gust:res.data.map(d=>d.gust),cape:res.data.map(d=>d.cape)};
+                    }catch(e){}
+                }));
+            }
+            renderTable();
+            updateTableHighlight(true); // scroll to current slider position after fetch
+            document.getElementById('tbl-status').textContent=`${Object.keys(tableData).length} models • ${pinLat.toFixed(3)}°, ${pinLon.toFixed(3)}°`;
+        } catch(e){
+            document.getElementById('tbl-status').textContent='Fetch failed';
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // TABLE COLUMNS  (filtered by Race / 24HR)
+    // ═══════════════════════════════════════════════════════════
+    function getTableColumns(){
+        // Use the model with the most timestamps so short-forecast models don't cut the table
+        const first=Object.values(tableData).reduce((best,m)=>
+            (m.timestamps&&m.timestamps.length>(best?.timestamps?.length||0)?m:best), null);
+        if(!first||!first.timestamps||!first.timestamps.length) return [];
+        const all=first.timestamps.map((ts,i)=>({ts,i}));
+
+        if(tableHoursMode==='race'){
+            const daysSet = new Set();
+            return all.filter(({ts})=>{
+                const d = new Date(ts.endsWith('Z')?ts:ts+'Z');
+                const h = cestHour(d);
+                if(h < 9 || h > 18) return false;
+                // Track unique race days (date in Rome TZ)
+                const dayKey = d.toLocaleString('sv',{timeZone:'Europe/Rome'}).split(' ')[0];
+                daysSet.add(dayKey);
+                return daysSet.size <= 5; // max 5 race days
+            });
+        }
+
+        if(tableHoursMode==='24hr'){
+            // Next 24 hours from start of data
+            return all.slice(0,24);
+        }
+
+        // Full run — all available timestamps
+        return all;
+    }
+
+    function cestHour(d){
+        // Use Swedish locale: gives reliable "YYYY-MM-DD HH:MM:SS" format in all browsers
+        const str = d.toLocaleString('sv', {timeZone:'Europe/Rome'});
+        return parseInt(str.split(' ')[1].split(':')[0]);
+    }
+    function cestHHMM(d){
+        const str = d.toLocaleString('sv', {timeZone:'Europe/Rome'});
+        const parts = str.split(' ')[1].split(':');
+        return `${parts[0]}:${parts[1]}`;
+    }
+
+    let _lastColDay = null;
+
+    function formatColHeader(ts){
+        const d=new Date(ts.endsWith('Z')?ts:ts+'Z');
+        const hStr=cestHHMM(d);
+        const day=new Intl.DateTimeFormat('en-US',{timeZone:'Europe/Rome',weekday:'short'}).format(d);
+
+        if(tableHoursMode==='race'){
+            // Show day name on first column of each new day
+            if(day !== _lastColDay){
+                _lastColDay = day;
+                return `${day}\n${hStr}`;
+            }
+            return hStr;
+        }
+
+        const h=cestHour(d);
+        if(h===0) return `${day}\n${hStr}`;
+        return hStr;
+    }
+
+    // Find which table column index corresponds to the current map time slider
+    function currentSliderColumnIndex(columns){
+        if(!columns.length||!timelineTimestamps.length) return -1;
+        const sliderTs=timelineTimestamps[currentFrameIdx];
+        if(!sliderTs) return -1;
+        const sliderTime=new Date(sliderTs.endsWith('Z')?sliderTs:sliderTs+'Z').getTime();
+        let best=-1,bestDiff=Infinity;
+        columns.forEach(({ts},ci)=>{
+            const t=new Date(ts.endsWith('Z')?ts:ts+'Z').getTime();
+            const diff=Math.abs(t-sliderTime);
+            if(diff<bestDiff){bestDiff=diff;best=ci;}
+        });
+        return best;
+    }
+
+    let _lastHighlightCol = -1;
+
+    async function jumpToTableColumn(ts, th){
+        // Find the closest frame in the map timeline for this timestamp
+        const targetTime = new Date(ts.endsWith('Z')?ts:ts+'Z').getTime();
+        let bestIdx = 0, bestDiff = Infinity;
+        timelineTimestamps.forEach((s,i)=>{
+            const t = new Date(s.endsWith('Z')?s:s+'Z').getTime();
+            const diff = Math.abs(t - targetTime);
+            if(diff < bestDiff){ bestDiff=diff; bestIdx=i; }
+        });
+
+        // Jump the slider and map to that frame
+        currentFrameIdx = bestIdx;
+        document.getElementById('time-slider').value = bestIdx;
+        updateTimeDisplay(true); // updates label + centres the column
+        await streamIsolatedFrame(bestIdx);
+        renderCurrentFrameToCanvas();
+        updatePinPopup();
+    }
+
+    function updateTableHighlight(instant=false){
+        const wrap = document.getElementById('wx-table-wrap');
+        const table = wrap && wrap.querySelector('.wx-wind-table');
+        if(!table) return;
+
+        const cols = getTableColumns();
+        const nowCol = currentSliderColumnIndex(cols);
+
+        // Apply highlight classes
+        const ths = table.querySelectorAll('thead th');
+        let highlightedTh = null;
+        ths.forEach((th, i) => {
+            if(i === 0) return;
+            const active = i - 1 === nowCol;
+            th.classList.toggle('wx-col-now', active);
+            if(active) highlightedTh = th;
+        });
+        table.querySelectorAll('tbody tr').forEach(tr => {
+            Array.from(tr.cells).forEach((td, i) => {
+                if(i === 0) return;
+                td.classList.toggle('wx-col-now', i - 1 === nowCol);
+            });
+        });
+
+        // Keep highlighted column centred in the visible area
+        if(highlightedTh){
+            _lastHighlightCol = nowCol;
+            const allThs = Array.from(table.querySelectorAll('thead th'));
+            let leftPos = 0;
+            for(let i = 0; i < allThs.length; i++){
+                if(allThs[i] === highlightedTh) break;
+                leftPos += allThs[i].offsetWidth;
+            }
+            const colW = highlightedTh.offsetWidth || 66;
+            const target = leftPos - wrap.clientWidth / 2 + colW / 2;
+            wrap.scrollTo({ left: Math.max(0, target), behavior: instant ? 'instant' : 'smooth' });
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // RENDER TABLE
+    // ═══════════════════════════════════════════════════════════
+    function renderTable(){
+        const wrap=document.getElementById('wx-table-wrap');
+        const cols=getTableColumns();
+        const ids=Object.keys(tableData);
+        if(!ids.length){
+            wrap.innerHTML='<div class="wx-empty-state">Place a pin on the map then click <strong>Fetch Data</strong></div>';return;
+        }
+        const nowCol=currentSliderColumnIndex(cols);
+
+        // Pre-compute headers (stateful day tracker runs once)
+        _lastColDay = null;
+        const headers = cols.map(({ts}) => formatColHeader(ts));
+        const dayBreaks = headers.map(h => h.includes('\n'));
+
+        const tbl=document.createElement('table');tbl.className='wx-wind-table';
+        const thead=tbl.createTHead(),hr=thead.insertRow();
+        const th0=document.createElement('th');th0.className='wx-model-col';th0.textContent='Model';hr.appendChild(th0);
+        cols.forEach(({ts},ci)=>{
+            const th=document.createElement('th');
+            th.textContent=headers[ci];
+            th.classList.add('wx-time-col');
+            if(dayBreaks[ci]) th.classList.add('wx-day-break');
+            if(ci===nowCol) th.classList.add('wx-col-now');
+            th.addEventListener('click',()=>jumpToTableColumn(ts, th));
+            hr.appendChild(th);
+        });
+        const tbody=tbl.createTBody();
+        ids.forEach(id=>{
+            const d=tableData[id],tr=tbody.insertRow();
+            const ltd=document.createElement('td');ltd.className='wx-model-cell';
+            ltd.innerHTML=`<div class="wx-model-name">${d.label}</div><div class="wx-model-sub">${d.source} ${d.res}</div>`;
+            tr.appendChild(ltd);
+            cols.forEach(({i:di},ci)=>{
+                const td=document.createElement('td');
+                if(ci===nowCol) td.classList.add('wx-col-now');
+                if(dayBreaks[ci]) td.classList.add('wx-day-break');
+                if(tableMetric==='wind') renderWindCell(td,d.tws?.[di],d.twd?.[di],d.gust?.[di]);
+                else renderCapeCell(td,d.cape?.[di]);
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+        });
+        wrap.innerHTML='';wrap.appendChild(tbl);
+    }
+
+    function renderWindCell(td,tws,twd,gust){
+        const bg=windColor(tws),fg=contrastColor(bg);
+        td.style.background=bg;
+        const cell=document.createElement('div');cell.className='wx-cell';cell.style.color=fg;
+        if(tws==null){cell.innerHTML='<span class="wx-null">—</span>';}
+        else{
+            const arrow=twd!=null?`<span class="wx-arrow" style="transform:rotate(${(twd+180)%360}deg);display:inline-block">↑</span>`:'<span class="wx-null">–</span>';
+            const gustVal = gust != null ? Math.round(gust) : null;
+            const gustEst = gustVal == null && tws != null ? Math.round(tws * 1.25) : null;
+            const gustStr = gustVal != null ? `G${gustVal}` : gustEst != null ? `~${gustEst}` : '—';
+            cell.innerHTML=`<div class="wx-tws">${Math.round(tws)}</div>${arrow}<div class="wx-gust">${gustStr}</div>`;
+        }
+        td.appendChild(cell);
+    }
+
+    function renderCapeCell(td,cape){
+        td.style.background=capeColor(cape);
+        const cell=document.createElement('div');cell.className='wx-cell';
+        cell.innerHTML=cape==null?'<span class="wx-null">—</span>':`<div class="wx-cape-val">${Math.round(cape)}</div><div class="wx-cape-tier">${capeTier(cape)}</div>`;
+        td.appendChild(cell);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // DRAWER
+    // ═══════════════════════════════════════════════════════════
+    function toggleDrawer(){
+        drawerOpen=!drawerOpen;
+        const dr=document.getElementById('comparison-drawer');
+        dr.classList.toggle('open',drawerOpen);
+        document.getElementById('drawer-fab-icon').textContent=drawerOpen?'▼':'▲';
+        setTimeout(()=>{resizeParticleCanvas();map.resize();},320);
+        if(drawerOpen&&!Object.keys(tableData).length) fetchTableData();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // MODEL PICKER PANEL
+    // ═══════════════════════════════════════════════════════════
+    function rebuildModelPanel(){
+        const panel=document.getElementById('tbl-models-panel');
+        const models=tableSource==='om'?TABLE_OM_MODELS:TABLE_GRIB_MODELS;
+        panel.innerHTML='';
+        models.forEach(({id,label,res})=>{
+            const row=document.createElement('label');row.className='tbl-model-row';
+            const cb=document.createElement('input');cb.type='checkbox';cb.value=id;
+            cb.checked=selectedTableModels.has(id);
+            cb.addEventListener('change',()=>{
+                if(cb.checked) selectedTableModels.add(id); else selectedTableModels.delete(id);
+                updateModelsBtnLabel();
+                scheduleTableRefresh(200);
+            });
+            const name=document.createElement('span');name.textContent=label;
+            const sub=document.createElement('span');sub.className='tbl-model-sub';sub.textContent=res;
+            row.appendChild(cb);row.appendChild(name);row.appendChild(sub);
+            panel.appendChild(row);
+        });
+        updateModelsBtnLabel();
+    }
+    function updateModelsBtnLabel(){document.getElementById('tbl-models-label').textContent=`${selectedTableModels.size} selected`;}
+
+    function toggleModelPanel(e){
+        e.stopPropagation();
+        const panel=document.getElementById('tbl-models-panel');
+        const open=panel.classList.toggle('open');
+        if(open){
+            const r=document.getElementById('tbl-models-btn').getBoundingClientRect();
+            panel.style.left=`${r.left}px`;panel.style.top=`${r.bottom+4}px`;
+        }
+    }
+    document.addEventListener('click',()=>{document.getElementById('tbl-models-panel').classList.remove('open');});
+
+    // ═══════════════════════════════════════════════════════════
+    // CLOCK
+    // ═══════════════════════════════════════════════════════════
+    function updateClock(){
+        const el=document.getElementById('header-time');if(!el) return;
+        const s=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Rome',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date());
+        el.textContent=`${s} CEST`;
+    }
+    updateClock();setInterval(updateClock,1000);
+
+    // ═══════════════════════════════════════════════════════════
+    // INIT
+    // ═══════════════════════════════════════════════════════════
+        map.on('error', e => console.error('Mapbox error:', e));
+
+        map.on('load',()=>{
+        resizeParticleCanvas();
+        window.addEventListener('resize',()=>{resizeParticleCanvas();map.resize();});
+        map.on('move',()=>{pCtx.clearRect(0,0,pCanvas.width,pCanvas.height);});
+
+        document.getElementById('time-slider').addEventListener('input',async e=>{
+            if(isPlaying){clearTimeout(playTimer);isPlaying=false;document.getElementById('play-btn').textContent='▶';}
+            currentFrameIdx=parseInt(e.target.value);
+            updateTimeDisplay(true);  // instant scroll — single call, no duplicate
+            await streamIsolatedFrame(currentFrameIdx);
+            if(currentFrameIdx===parseInt(e.target.value)){
+                renderCurrentFrameToCanvas();
+                updatePinPopup();
+            }
+        });
+
+        initPin();
+        rebuildModelPanel();
+        applySourceVisibility();
+        initAllDotsRed();
+        executeSlicedModelSync().then(()=>{
+            initParticlePool();runningParticleLoop();refreshAllDots();
+            updatePinPopup();
+        });
+    });
+    </script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel
 import xarray as xr
 import numpy as np
 import httpx
@@ -145,9 +146,39 @@ def parse_and_regrid_grib(file_path: str):
         "frames": compiled_frames
     }
 
+# ── Open-Meteo models available for point comparison ──────────────────────────
+OM_POINT_MODELS = {
+    "ecmwf_ifs":                   {"label": "ECMWF IFS",    "res": "9km"},
+    "gfs_seamless":                {"label": "GFS",          "res": "13km"},
+    "icon_eu":                     {"label": "ICON-EU",      "res": "7km"},
+    "meteofrance_arpege_europe":   {"label": "ARPEGE",       "res": "11km"},
+    "meteofrance_arome_france_hd": {"label": "AROME HD",     "res": "1.5km"},
+}
+
+class OmPointRequest(BaseModel):
+    lat: float
+    lon: float
+    models: list[str]
+
+@app.get("/config.js")
+def get_config_js():
+    token = os.environ.get("MAPBOX_TOKEN", "")
+    if not token:
+        try:
+            with open("config.js") as f:
+                return Response(content=f.read(), media_type="application/javascript")
+        except FileNotFoundError:
+            pass
+    js = f'window.MAPBOX_ACCESS_TOKEN = "{token}";\n'
+    return Response(content=js, media_type="application/javascript")
+
 @app.get("/")
 def get_interface():
     return FileResponse("index_v3.html")
+
+@app.get("/weather")
+def get_weather():
+    return FileResponse("weather.html")
 
 @app.get("/api/weather/grib-status")
 def get_grib_status():
@@ -241,8 +272,8 @@ async def fetch_api_chunk(client, semaphore, chunk_coords, api_model, api_key):
         flat_lons = [c[1] for c in chunk_coords]
         payload = {
             "latitude": flat_lats, "longitude": flat_lons,
-            "hourly": ["wind_speed_10m", "wind_direction_10m"],
-            "wind_speed_unit": "ms", "forecast_days": 3, "models": [api_model], "apikey": api_key
+            "hourly": ["wind_speed_10m", "wind_direction_10m", "wind_gusts_10m"],
+            "wind_speed_unit": "ms", "forecast_days": 5, "models": [api_model], "apikey": api_key
         }
         res = await client.post("https://customer-api.open-meteo.com/v1/forecast", json=payload, timeout=60.0)
         raw = res.json()
@@ -259,28 +290,122 @@ async def process_live_web_api(api_model: str, api_key: str, nx: int, ny: int, l
         completed = await asyncio.gather(*tasks)
         for chunk_res in completed: all_results.extend(chunk_res)
 
-    target_indices = list(range(0, 72, 1))
+    target_indices = list(range(0, 120, 1))
     timeline_timestamps = [all_results[0]["hourly"]["time"][t] for t in target_indices]
     compiled_frames = []
     for t in target_indices:
         u_grid = [[0.0 for _ in range(nx)] for _ in range(ny)]
         v_grid = [[0.0 for _ in range(nx)] for _ in range(ny)]
+        g_grid = [[None for _ in range(nx)] for _ in range(ny)]
         idx = 0
         for r in range(ny):
             for c in range(nx):
                 hourly_data = all_results[idx].get("hourly", {})
                 speed = hourly_data.get("wind_speed_10m", [])[t] or 0.0
                 direction = hourly_data.get("wind_direction_10m", [])[t] or 0.0
+                gust_ms = hourly_data.get("wind_gusts_10m", [None])[t] if hourly_data.get("wind_gusts_10m") else None
                 rad = math.radians(direction)
                 u_grid[r][c] = -speed * math.sin(rad)
                 v_grid[r][c] = -speed * math.cos(rad)
+                g_grid[r][c] = gust_ms
                 idx += 1
-        compiled_frames.append({"uData": u_grid, "vData": v_grid})
+        compiled_frames.append({"uData": u_grid, "vData": v_grid, "gustData": g_grid})
     return {
         "header": {"la1": API_LAT_START, "lo1": API_LON_START, "dx": abs(API_LON_STEP), "dy": abs(API_LAT_STEP), "nx": nx, "ny": ny},
         "timestamps": timeline_timestamps,
         "frames": compiled_frames
     }
+
+@app.get("/api/weather/point")
+async def get_weather_point(lat: float, lon: float, model: str = "ecmwf_ifs", source: str = "grib"):
+    """Extract a point time-series (TWS kt, TWD deg) from loaded GRIB or API grid."""
+    cache_key = f"{model}_{source}"
+    if cache_key not in MASTER_WEATHER_REGISTRY:
+        await load_individual_source_into_registry(model, source)
+    if cache_key not in MASTER_WEATHER_REGISTRY:
+        return JSONResponse(status_code=404, content={"error": f"No data for {model}/{source}"})
+
+    profile = MASTER_WEATHER_REGISTRY[cache_key]
+    header, frames, timestamps = profile["header"], profile["frames"], profile["timestamps"]
+
+    la1, lo1 = header["la1"], header["lo1"]
+    dx, dy   = header["dx"],  header["dy"]
+    nx, ny   = header["nx"],  header["ny"]
+
+    col = int(round((lon - lo1) / dx))
+    row = int(round((la1 - lat) / dy))
+    col = max(0, min(nx - 1, col))
+    row = max(0, min(ny - 1, row))
+
+    result = []
+    for i, ts in enumerate(timestamps):
+        u = frames[i]["uData"][row][col]
+        v = frames[i]["vData"][row][col]
+        speed_ms = math.sqrt(u * u + v * v)
+        tws_kt   = round(speed_ms * 1.94384, 1)
+        twd      = round((math.degrees(math.atan2(-u, -v)) + 360) % 360, 0)
+        gust_raw = frames[i].get("gustData", [[None]])[row][col] if frames[i].get("gustData") else None
+        gust_kt  = round(gust_raw * 1.94384, 1) if gust_raw is not None else None
+        result.append({"timestamp": ts, "tws": tws_kt, "twd": twd, "gust": gust_kt, "cape": None})
+
+    return {"model": model, "source": source, "data": result}
+
+
+@app.post("/api/weather/om")
+async def get_weather_om(body: OmPointRequest):
+    """Fetch point wind forecasts from Open-Meteo for one or more models."""
+    results = {}
+    async with httpx.AsyncClient() as client:
+        tasks = {}
+        for model_id in body.models:
+            if model_id not in OM_POINT_MODELS:
+                continue
+            tasks[model_id] = client.get(
+                "https://customer-api.open-meteo.com/v1/forecast",
+                params={
+                    "latitude":        body.lat,
+                    "longitude":       body.lon,
+                    "hourly":          "wind_speed_10m,wind_direction_10m,wind_gusts_10m,cape",
+                    "wind_speed_unit": "kn",
+                    "forecast_days":   7,
+                    "models":          model_id,
+                    "apikey":          OPENMETEO_API_KEY,
+                },
+                timeout=30.0,
+            )
+        responses = await asyncio.gather(*tasks.values(), return_exceptions=True)
+        for model_id, resp in zip(tasks.keys(), responses):
+            if isinstance(resp, Exception):
+                results[model_id] = {"error": str(resp)}
+                continue
+            try:
+                d = resp.json()
+                h = d.get("hourly", {})
+                times  = h.get("time", [])
+                speeds = h.get("wind_speed_10m", [])
+                dirs   = h.get("wind_direction_10m", [])
+                gusts  = h.get("wind_gusts_10m", [])
+                capes  = h.get("cape", [])
+                point_data = []
+                for i, ts in enumerate(times):
+                    point_data.append({
+                        "timestamp": ts,
+                        "tws":  round(speeds[i], 1) if speeds and speeds[i] is not None else None,
+                        "twd":  round(dirs[i],   0) if dirs   and dirs[i]   is not None else None,
+                        "gust": round(gusts[i],  1) if gusts  and gusts[i]  is not None else None,
+                        "cape": round(capes[i],  0) if capes  and i < len(capes) and capes[i] is not None else None,
+                    })
+                results[model_id] = {"source": "om", "data": point_data}
+            except Exception as e:
+                results[model_id] = {"error": str(e)}
+    return results
+
+
+@app.get("/api/weather/om-models")
+def get_om_models():
+    """Return available Open-Meteo models for the comparison table."""
+    return OM_POINT_MODELS
+
 
 def warm_up_local_grib_registry():
     print("\n🔥 Warming up local GRIB memory matrices via ADAPTIVE normalizations...")

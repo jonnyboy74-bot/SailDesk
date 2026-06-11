@@ -94,7 +94,7 @@
         <div class="sd-header-left">
             <div class="sd-logo">Sail<span>Desk</span></div>
             <nav class="sd-tab-bar">
-                <button class="sd-tab"        data-tab="weather">Weather</button>
+                <button class="sd-tab"        onclick="location.href='/weather'">Weather</button>
                 <button class="sd-tab active" data-tab="windmap">Wind Map</button>
                 <button class="sd-tab"        data-tab="briefing">Briefing</button>
                 <button class="sd-tab"        data-tab="seabreeze">Sea Breeze</button>
@@ -429,8 +429,8 @@
             if (timeStr && !timeStr.endsWith("Z") && !timeStr.includes("+")) timeStr += "Z";
             const dateObj = new Date(timeStr);
             document.getElementById('time-display').innerText = isNaN(dateObj.getTime()) ? "Step " + currentFrameIdx : dateObj.toLocaleString('en-US', {
-                weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false
-            }) + " UTC";
+                timeZone: 'Europe/Rome', weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false
+            }) + " CEST";
         }
 
         async function executeSlicedModelSync() {
