@@ -1,0 +1,24 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.env
+venv/
+.venv/
+
+# GRIB data (large binary files)
+gribs/*.grb2
+gribs/*.idx
+
+# Output
+output/
+
+# Archive / old versions
+archive/
+
+# Local config with secrets (copy config.example.js → config.js)
+config.js

@@ -1,0 +1,11 @@
+services:
+  saildesk:
+    build: .
+    container_name: saildesk
+    ports:
+      - "8000:8000"
+    volumes:
+      - ~/Desktop/gribs:/gribs   # GRIBs stay on Desktop, mounted read-only into container
+    environment:
+      - GRIB_DIR=/gribs
+    restart: unless-stopped

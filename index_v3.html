@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SailDesk — Wind Map</title>
+    <script src="/config.js"></script>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css" rel="stylesheet" />
+    <link rel="icon" href="data:,">
+    <style>
+        :root {
+            --navy:   #1B3A5C;
+            --accent: #2563EB;
+            --font:   system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body, html { width: 100%; height: 100%; overflow: hidden; background-color: #efefef; font-family: var(--font); }
+
+        /* ── SailDesk Header ── */
+        .sd-header {
+            display: flex; align-items: center; gap: 1rem;
+            background: var(--navy); padding: 0 1.5rem; height: 48px;
+            flex-shrink: 0; z-index: 100; position: relative;
+        }
+        .sd-header-left { display: flex; align-items: center; gap: .65rem; min-width: 0; }
+        .sd-logo { font-size: 1.1rem; font-weight: 800; color: #fff; letter-spacing: -.03em; flex-shrink: 0; }
+        .sd-logo span { color: #60A5FA; }
+        .sd-tab-bar { display: flex; gap: .25rem; flex-shrink: 0; }
+        .sd-tab {
+            border: none; background: none; color: rgba(255,255,255,.65);
+            padding: .35rem .9rem; border-radius: 6px; font-size: .8rem;
+            font-weight: 600; cursor: pointer; font-family: var(--font);
+            transition: background .15s, color .15s;
+        }
+        .sd-tab:hover { background: rgba(255,255,255,.1); color: #fff; }
+        .sd-tab.active { background: var(--accent); color: #fff; }
+        .sd-header-time { margin-left: auto; font-size: .7rem; color: rgba(255,255,255,.5); white-space: nowrap; }
+
+        /* ── Map area ── */
+        #map-container { position: absolute; top: 48px; left: 0; right: 0; bottom: 0; overflow: hidden; }
+        #map { width: 100%; height: 100%; position: absolute; top: 0; bottom: 0; }
+        #particle-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+        #loading-indicator {
+            position: absolute; top: 10px; left: 10px; z-index: 10;
+            background: rgba(255, 255, 255, 0.95); color: #0f172a; padding: 12px 20px;
+            font-family: monospace; border-radius: 6px; pointer-events: none;
+            border: 1px solid #cbd5e1; font-size: 13px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        #timeline-container {
+            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); z-index: 10;
+            width: 85%; max-width: 850px; background: rgba(255, 255, 255, 0.93);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(0,0,0,0.08); padding: 16px 25px; border-radius: 14px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.15); color: #1e293b; display: none;
+        }
+        .timeline-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 13px; letter-spacing: 0.5px; color: #64748b; }
+        #time-display { font-weight: 600; color: #0f172a; font-family: monospace; font-size: 15px; background: rgba(15,23,42,0.08); padding: 2px 8px; border-radius: 4px; }
+        .slider-wrapper { width: 100%; display: flex; align-items: center; }
+        #time-slider { width: 100%; -webkit-appearance: none; background: rgba(0,0,0,0.1); height: 6px; border-radius: 3px; outline: none; cursor: pointer; }
+        #time-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #0f172a; box-shadow: 0 0 10px rgba(15,23,42,0.3); cursor: pointer; }
+        #model-pill-box {
+            position: absolute; bottom: 130px; right: 25px; z-index: 12;
+            background: rgba(30, 41, 59, 0.92); backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px); padding: 8px; border-radius: 12px;
+            display: flex; flex-direction: column; gap: 6px; border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        #source-toggle-zone { display: flex; background: rgba(0,0,0,0.25); padding: 2px; border-radius: 6px; margin-bottom: 6px; }
+        .source-btn {
+            flex: 1; background: transparent; border: none; color: #94a3b8; padding: 6px 0;
+            font-size: 10px; font-weight: 800; text-transform: uppercase; border-radius: 4px;
+            cursor: pointer; text-align: center; transition: all 0.1s ease;
+        }
+        .source-btn.active { background: #3b82f6; color: #ffffff; }
+        .model-pill {
+            background: transparent; border: none; color: #94a3b8; padding: 8px 16px;
+            font-size: 11px; font-weight: 700; text-transform: uppercase; border-radius: 6px;
+            cursor: pointer; text-align: left; transition: all 0.15s ease; min-width: 160px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .model-pill:hover { background: rgba(255,255,255,0.05); color: #f1f5f9; }
+        .model-pill.active { background: #e2e8f0; color: #0f172a; }
+        .model-res-tag { font-size: 9px; opacity: 0.8; font-family: monospace; font-weight: 800; }
+        .grib-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; display: none; }
+        .grib-dot.green { background: #22c55e; box-shadow: 0 0 5px rgba(34,197,94,0.6); }
+        .grib-dot.red   { background: #ef4444; box-shadow: 0 0 5px rgba(239,68,68,0.6); }
+        .model-pill .grib-missing-label { font-size: 9px; color: #f87171; font-weight: 700; display: none; margin-left: auto; text-transform: uppercase; letter-spacing: 0.03em; }
+    </style>
+</head>
+<body>
+
+    <!-- ── SailDesk Header ── -->
+    <header class="sd-header">
+        <div class="sd-header-left">
+            <div class="sd-logo">Sail<span>Desk</span></div>
+            <nav class="sd-tab-bar">
+                <button class="sd-tab"        data-tab="weather">Weather</button>
+                <button class="sd-tab active" data-tab="windmap">Wind Map</button>
+                <button class="sd-tab"        data-tab="briefing">Briefing</button>
+                <button class="sd-tab"        data-tab="seabreeze">Sea Breeze</button>
+                <button class="sd-tab"        data-tab="tactics">Tactics</button>
+                <button class="sd-tab"        data-tab="course">Course</button>
+            </nav>
+        </div>
+        <div class="sd-header-time" id="header-time"></div>
+    </header>
+
+    <div id="map-container">
+        <div id="loading-indicator">Connecting to Marine Matrix...</div>
+        <div id="map"></div>
+        <canvas id="particle-canvas"></canvas>
+
+    <div id="model-pill-box">
+        <div id="source-toggle-zone">
+            <button id="src-api" class="source-btn active" onclick="switchDataSource('api')">Cloud API</button>
+            <button id="src-grib" class="source-btn" onclick="switchDataSource('grib')">Local GRIB</button>
+        </div>
+        
+        <button class="model-pill active" id="pill-ecmwf_ifs" onclick="switchActiveForecastModel('ecmwf_ifs')">
+            <span>ECMWF</span> <span class="model-res-tag">9km</span>
+            <span class="grib-missing-label">No GRIB</span><span class="grib-dot" id="dot-ecmwf_ifs"></span>
+        </button>
+        <button class="model-pill" id="pill-meteofrance_arome_france_hd" onclick="switchActiveForecastModel('meteofrance_arome_france_hd')">
+            <span>AROME HD</span> <span class="model-res-tag">1.5km</span>
+            <span class="grib-missing-label">No GRIB</span><span class="grib-dot" id="dot-meteofrance_arome_france_hd"></span>
+        </button>
+        <button class="model-pill" id="pill-lamma_1k" onclick="switchActiveForecastModel('lamma_1k')">
+            <span>LaMMA</span> <span class="model-res-tag">1km</span>
+            <span class="grib-missing-label">No GRIB</span><span class="grib-dot" id="dot-lamma_1k"></span>
+        </button>
+        <button class="model-pill" id="pill-icon_eu" onclick="switchActiveForecastModel('icon_eu')">
+            <span>ICON</span> <span class="model-res-tag">7km</span>
+            <span class="grib-missing-label">No GRIB</span><span class="grib-dot" id="dot-icon_eu"></span>
+        </button>
+        <button class="model-pill" id="pill-meteofrance_arpege_europe" onclick="switchActiveForecastModel('meteofrance_arpege_europe')">
+            <span>ARPEGE</span> <span class="model-res-tag">11km</span>
+            <span class="grib-missing-label">No GRIB</span><span class="grib-dot" id="dot-meteofrance_arpege_europe"></span>
+        </button>
+    </div>
+
+    <div id="timeline-container">
+        <div class="timeline-header">
+            <div id="model-display-title">ECMWF 9km Global HRES Horizon</div>
+            <div id="time-display">Connecting...</div>
+        </div>
+        <div class="slider-wrapper">
+            <input type="range" id="time-slider" min="0" max="71" value="0">
+        </div>
+    </div>
+    </div><!-- /map-container -->
+
+    <script>
+        const UX_RESOLUTION_TAGS = {
+            "ecmwf_ifs": "ECMWF 9km Global HRES Horizon",
+            "meteofrance_arome_france_hd": "AROME 1.5km Micro-Coastal Mesh",
+            "lamma_1k": "LaMMA 1km High-Fidelity Regional Mesh",
+            "icon_eu": "ICON 7km High-Resolution European Horizon",
+            "meteofrance_arpege_europe": "ARPEGE 11km Regional Forecast Horizon"
+        };
+
+        const API_BASE = window.location.origin;
+
+        mapboxgl.accessToken = window.MAPBOX_ACCESS_TOKEN;
+
+        const map = new mapboxgl.Map({
+            container: 'map', style: 'mapbox://styles/mapbox/light-v11', center: [6.2, 43.0], zoom: 6.8
+        });
+
+        let metadataHeader = null;
+        let timelineTimestamps = [];
+        let currentActiveFrameData = null;
+        
+        let currentFrameIdx = 0;
+        let activeModelId = "ecmwf_ifs";
+        let activeSourceId = "api"; 
+        
+        let browserSideFrameMatrixCache = {};
+
+        const pCanvas = document.getElementById('particle-canvas');
+        const pCtx = pCanvas.getContext('2d');
+        let particles = [];
+        const maxParticles = 1400; 
+
+        let weatherCanvas, weatherCtx, weatherImgData;
+        let isRenderingFrame = false;
+
+        const colorScale = [
+            { knots: 0,  color: [49, 59, 96, 0] },       
+            { knots: 4,  color: [54, 87, 150, 255] },    
+            { knots: 10, color: [64, 143, 160, 255] },   
+            { knots: 16, color: [80, 165, 80, 255] },    
+            { knots: 22, color: [160, 180, 50, 255] },   
+            { knots: 28, color: [230, 145, 30, 255] },   
+            { knots: 36, color: [210, 40, 50, 255] },    
+            { knots: 50, color: [150, 0, 80, 255] }      
+        ];
+
+        function findClosestTimeIndex(timestamps) {
+            if (!timestamps || timestamps.length === 0) return 0;
+            const now = new Date(); let closestIdx = 0; let minDiff = Infinity;
+            for (let i = 0; i < timestamps.length; i++) {
+                let timeStr = timestamps[i];
+                if (timeStr && !timeStr.endsWith("Z") && !timeStr.includes("+")) timeStr += "Z";
+                const frameTime = new Date(timeStr); const diff = Math.abs(now - frameTime);
+                if (diff < minDiff) { minDiff = diff; closestIdx = i; }
+            }
+            return closestIdx;
+        }
+
+        function getWindColorContinuous(speed) {
+            const knots = speed * 1.94384;
+            if (knots <= colorScale[0].knots) return colorScale[0].color;
+            if (knots >= colorScale[colorScale.length - 1].knots) return colorScale[colorScale.length - 1].color;
+            for (let i = 0; i < colorScale.length - 1; i++) {
+                const lower = colorScale[i]; const upper = colorScale[i + 1];
+                if (knots >= lower.knots && knots <= upper.knots) {
+                    const t = (knots - lower.knots) / (upper.knots - lower.knots);
+                    return [
+                        lower.color[0] + t * (upper.color[0] - lower.color[0]),
+                        lower.color[1] + t * (upper.color[1] - lower.color[1]),
+                        lower.color[2] + t * (upper.color[2] - lower.color[2]),
+                        lower.color[3] + t * (upper.color[3] - lower.color[3])
+                    ];
+                }
+            }
+            return [0, 0, 0, 0];
+        }
+
+        function getInterpolatedWind(lng, lat) {
+            if (!metadataHeader || !currentActiveFrameData) return { u: 0, v: 0, speed: 0 };
+            const h = metadataHeader;
+            const maxLng = h.lo1 + (h.dx * (h.nx - 1));
+            const minLat = h.la1 - (h.dy * (h.ny - 1));
+            if (lat > h.la1 || lat < minLat || lng < h.lo1 || lng > maxLng) return { u: 0, v: 0, speed: 0 };
+            
+            let x = (lng - h.lo1) / h.dx; let y = (h.la1 - lat) / h.dy;
+            let x0 = Math.floor(x); let x1 = Math.min(x0 + 1, h.nx - 1);
+            let y0 = Math.floor(y); let y1 = Math.min(y0 + 1, h.ny - 1);
+            let xt = x - x0; let yt = y - y0;
+
+            x0 = Math.max(0, Math.min(x0, h.nx - 1));
+            x1 = Math.max(0, Math.min(x1, h.nx - 1));
+            y0 = Math.max(0, Math.min(y0, h.ny - 1));
+            y1 = Math.max(0, Math.min(y1, h.ny - 1));
+
+            const u00 = currentActiveFrameData.uData?.[y0]?.[x0] ?? 0;
+            const u01 = currentActiveFrameData.uData?.[y0]?.[x1] ?? 0;
+            const u10 = currentActiveFrameData.uData?.[y1]?.[x0] ?? 0;
+            const u11 = currentActiveFrameData.uData?.[y1]?.[x1] ?? 0;
+
+            const v00 = currentActiveFrameData.vData?.[y0]?.[x0] ?? 0;
+            const v01 = currentActiveFrameData.vData?.[y0]?.[x1] ?? 0;
+            const v10 = currentActiveFrameData.vData?.[y1]?.[x0] ?? 0;
+            const v11 = currentActiveFrameData.vData?.[y1]?.[x1] ?? 0;
+
+            const u = (1-yt)*((1-xt)*u00 + xt*u01) + yt*((1-xt)*u10 + xt*u11);
+            const v = (1-yt)*((1-xt)*v00 + xt*v01) + yt*((1-xt)*v10 + xt*v11);
+            return { u, v, speed: Math.sqrt(u*u + v*v) };
+        }
+
+        function latToMercatorY(lat) { return Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI / 180) / 2)); }
+        function mercatorYToLat(y) { return (2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180 / Math.PI; }
+
+        function renderCurrentFrameToCanvas() {
+            return new Promise((resolve) => {
+                if (!metadataHeader || !currentActiveFrameData || !weatherCanvas) { resolve(); return; }
+                if (isRenderingFrame) { resolve(); return; }
+                isRenderingFrame = true;
+                setTimeout(() => {
+                    if (!metadataHeader || !currentActiveFrameData || !currentActiveFrameData.uData) {
+                        isRenderingFrame = false; resolve(); return;
+                    }
+                    try {
+                        const h = metadataHeader;
+                        const tw = weatherCanvas.width; const th = weatherCanvas.height;
+                        const totalLngSpan = h.dx * (h.nx - 1); const bottomLat = h.la1 - h.dy * (h.ny - 1);
+                        const mercYTop = latToMercatorY(h.la1); const mercYBottom = latToMercatorY(bottomLat);
+                        let pIdx = 0;
+                        for (let y = 0; y < th; y++) {
+                            const currentMercY = mercYTop - (y / (th - 1)) * (mercYTop - mercYBottom);
+                            const realLat = mercatorYToLat(currentMercY);
+                            for (let x = 0; x < tw; x++) {
+                                const lng = h.lo1 + (x / (tw - 1)) * totalLngSpan;
+                                const wind = getInterpolatedWind(lng, realLat);
+                                const color = getWindColorContinuous(wind.speed);
+                                weatherImgData.data[pIdx]   = Math.round(color[0]);
+                                weatherImgData.data[pIdx+1] = Math.round(color[1]);
+                                weatherImgData.data[pIdx+2] = Math.round(color[2]);
+                                weatherImgData.data[pIdx+3] = Math.round(color[3]);
+                                pIdx += 4;
+                            }
+                        }
+                        weatherCtx.clearRect(0, 0, tw, th);
+                        weatherCtx.putImageData(weatherImgData, 0, 0);
+                        map.triggerRepaint();
+                    } catch (e) {
+                    } finally {
+                        isRenderingFrame = false;
+                        resolve();
+                    }
+                }, 0);
+            });
+        }
+
+        function resizeParticleCanvas() { const c = document.getElementById('map-container'); pCanvas.width = c.offsetWidth; pCanvas.height = c.offsetHeight; }
+
+        function initParticlePool() {
+            particles = [];
+            for (let i = 0; i < maxParticles; i++) {
+                particles.push({ x: Math.random() * pCanvas.width, y: Math.random() * pCanvas.height, age: Math.floor(Math.random() * 55) });
+            }
+        }
+
+        function runningParticleLoop() {
+            if (!pCtx) return; 
+            requestAnimationFrame(runningParticleLoop);
+
+            if (!metadataHeader || !currentActiveFrameData || !currentActiveFrameData.uData || particles.length === 0) {
+                pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height);
+                return;
+            }
+
+            pCtx.globalCompositeOperation = 'destination-in';
+            pCtx.fillStyle = 'rgba(0, 0, 0, 0.90)'; pCtx.fillRect(0, 0, pCanvas.width, pCanvas.height);
+            pCtx.globalCompositeOperation = 'source-over';
+            pCtx.strokeStyle = 'rgba(255, 255, 255, 0.75)'; pCtx.lineWidth = 2.2; 
+
+            const currentZoom = map.getZoom();
+            const velocityScale = 0.075 / Math.sqrt(currentZoom - 3 || 1); 
+            const visibleCount = Math.min(maxParticles, Math.round(maxParticles * (6.0 / currentZoom)));
+
+            for (let i = 0; i < visibleCount; i++) {
+                let p = particles[i];
+                if (!p) continue; 
+                if (isNaN(p.x) || p.x < 0 || p.x > pCanvas.width || p.y < 0 || p.y > pCanvas.height) {
+                    p.x = Math.random() * pCanvas.width; p.y = Math.random() * pCanvas.height; p.age = 0; continue;
+                }
+                let lngLat;
+                try {
+                    lngLat = map.unproject([p.x, p.y]);
+                } catch(err) { p.x = Math.random() * pCanvas.width; p.y = Math.random() * pCanvas.height; p.age = 0; continue; }
+
+                const wind = getInterpolatedWind(lngLat.lng, lngLat.lat);
+                let u = wind.u; let v = wind.v; let speedKnots = wind.speed * 1.94384;
+                if (speedKnots < 4.0 && speedKnots > 0.1) { let boostScale = 4.0 / speedKnots; u *= boostScale; v *= boostScale; }
+                if (wind.speed <= 0.1 || p.age > 65) { p.x = Math.random() * pCanvas.width; p.y = Math.random() * pCanvas.height; p.age = 0; continue; }
+
+                const nextX = p.x + (u * velocityScale * 3.6); const nextY = p.y - (v * velocityScale * 3.6);
+                if (!isNaN(nextX) && !isNaN(nextY)) { pCtx.beginPath(); pCtx.moveTo(p.x, p.y); pCtx.lineTo(nextX, nextY); pCtx.stroke(); }
+                p.x = nextX; p.y = nextY; p.age++;
+            }
+        }
+
+        function buildParticleStreamlineOverlay() {
+            resizeParticleCanvas();
+            window.addEventListener('resize', resizeParticleCanvas);
+            map.on('move', () => { pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height); });
+            runningParticleLoop();
+        }
+
+        function applyMarineThemeOverlays(labelLayerId, coastlineId) {
+            const style = map.getStyle();
+            if (!style || !style.layers) return;
+            for (const layer of style.layers) {
+                if (layer.id.includes('landcover') || layer.id.includes('national_park') || layer.id.includes('road')) map.setLayoutProperty(layer.id, 'visibility', 'none');
+                if (layer.id === 'background' || layer.id.includes('land') || layer.id.includes('landuse')) {
+                    if (layer.type === 'background') map.setPaintProperty(layer.id, 'background-color', 'rgba(74, 91, 107, 0.78)');
+                    if (layer.type === 'fill') map.setPaintProperty(layer.id, 'fill-color', 'rgba(74, 91, 107, 0.78)');
+                }
+                if (layer.type === 'symbol') {
+                    try {
+                        map.setPaintProperty(layer.id, 'text-color', '#ffffff');
+                        map.setPaintProperty(layer.id, 'text-halo-color', 'rgba(15, 23, 42, 0.95)');
+                        map.setPaintProperty(layer.id, 'text-halo-width', 1.8);
+                    } catch (e) {}
+                }
+            }
+            if (!map.getLayer(coastlineId)) {
+                map.addLayer({ id: coastlineId, type: 'line', source: 'composite', 'source-layer': 'water', paint: { 'line-color': '#11151c', 'line-width': 1.2, 'line-opacity': 0.95 } }, labelLayerId);
+            }
+        }
+
+        // One permanent canvas, source and layer — never removed, just updated in place
+        const WX_CANVAS_ID = 'weather-canvas-main';
+        const WX_SOURCE_ID = 'weather-source-main';
+        const WX_LAYER_ID  = 'weather-layer-main';
+        const WX_COAST_ID  = 'crisp-coastlines-main';
+
+        function initWeatherCanvas() {
+            let c = document.getElementById(WX_CANVAS_ID);
+            if (!c) {
+                c = document.createElement('canvas');
+                c.id = WX_CANVAS_ID; c.width = 1600; c.height = 1000; c.style.display = 'none';
+                document.body.appendChild(c);
+            }
+            weatherCanvas = c;
+            weatherCtx = weatherCanvas.getContext('2d', { willReadFrequently: true });
+            weatherImgData = weatherCtx.createImageData(weatherCanvas.width, weatherCanvas.height);
+        }
+
+        function mountOrUpdateWeatherLayer() {
+            if (!metadataHeader) return;
+            const h = metadataHeader;
+            const coords = [
+                [h.lo1, h.la1],
+                [h.lo1 + h.dx * (h.nx - 1), h.la1],
+                [h.lo1 + h.dx * (h.nx - 1), h.la1 - h.dy * (h.ny - 1)],
+                [h.lo1, h.la1 - h.dy * (h.ny - 1)]
+            ];
+            if (map.getSource(WX_SOURCE_ID)) {
+                // Already mounted — just update the geographical bounds and repaint
+                map.getSource(WX_SOURCE_ID).setCoordinates(coords);
+            } else {
+                // First load — add source and layer once
+                const layers = map.getStyle().layers; let labelLayerId;
+                for (let i = 0; i < layers.length; i++) { if (layers[i].type === 'symbol') { labelLayerId = layers[i].id; break; } }
+                map.addSource(WX_SOURCE_ID, { type: 'canvas', canvas: WX_CANVAS_ID, animate: true, coordinates: coords });
+                map.addLayer({ id: WX_LAYER_ID, type: 'raster', source: WX_SOURCE_ID, paint: { 'raster-opacity': 0.88, 'raster-resampling': 'linear' } }, labelLayerId);
+                applyMarineThemeOverlays(labelLayerId, WX_COAST_ID);
+            }
+            const src = map.getSource(WX_SOURCE_ID);
+            if (src) src.play();
+            map.triggerRepaint();
+        }
+
+        function updateTimelineDisplayString() {
+            if (!timelineTimestamps || !timelineTimestamps[currentFrameIdx]) return;
+            let timeStr = timelineTimestamps[currentFrameIdx];
+            if (timeStr && !timeStr.endsWith("Z") && !timeStr.includes("+")) timeStr += "Z";
+            const dateObj = new Date(timeStr);
+            document.getElementById('time-display').innerText = isNaN(dateObj.getTime()) ? "Step " + currentFrameIdx : dateObj.toLocaleString('en-US', {
+                weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false
+            }) + " UTC";
+        }
+
+        async function executeSlicedModelSync() {
+            setModelDot(activeModelId, 'loading');
+
+            try {
+                const metaRes = await fetch(`${API_BASE}/api/weather/metadata?model=${activeModelId}&source=${activeSourceId}`);
+                const metaData = await metaRes.json();
+                if (metaData.error) throw new Error(metaData.error);
+
+                // Hold new header in a local — don't assign to metadataHeader yet
+                // so the particle loop stays consistent with the old frame data
+                const pendingHeader = metaData.header;
+                timelineTimestamps = metaData.timestamps;
+
+                const slider = document.getElementById('time-slider');
+                slider.max = timelineTimestamps.length - 1;
+                currentFrameIdx = findClosestTimeIndex(timelineTimestamps);
+                slider.value = currentFrameIdx;
+
+                // Fetch new frame data
+                const pendingFrame = await streamIsolatedFramePending(currentFrameIdx);
+
+                // Both ready — assign atomically so particle loop never sees a mismatch
+                metadataHeader = pendingHeader;
+                currentActiveFrameData = pendingFrame;
+                updateTimelineDisplayString();
+
+                // Render to canvas (already consistent), then update layer bounds in place
+                initWeatherCanvas();
+                await renderCurrentFrameToCanvas();
+                mountOrUpdateWeatherLayer();
+
+                document.getElementById('timeline-container').style.display = 'block';
+                document.getElementById('loading-indicator').style.display = 'none';
+
+                setModelDot(activeModelId, 'loaded');
+                triggerBackgroundCacheWarmup();
+            } catch (e) {
+                console.error(e);
+                document.getElementById('loading-indicator').style.color = '#ff3333';
+                document.getElementById('loading-indicator').innerText = "Sync Mismatch Error";
+                setModelDot(activeModelId, 'error');
+            }
+        }
+
+        // Returns frame data without touching currentActiveFrameData — used during model switch
+        async function streamIsolatedFramePending(frameIdx) {
+            const cacheKey = `${activeModelId}_${activeSourceId}_frame_${frameIdx}`;
+            if (browserSideFrameMatrixCache[cacheKey]) return browserSideFrameMatrixCache[cacheKey];
+            const frameRes = await fetch(`${API_BASE}/api/weather/frame?model=${activeModelId}&source=${activeSourceId}&frame=${frameIdx}`);
+            const data = await frameRes.json();
+            browserSideFrameMatrixCache[cacheKey] = data;
+            return data;
+        }
+
+        async function streamIsolatedFrame(frameIdx) {
+            updateTimelineDisplayString();
+            const cacheKey = `${activeModelId}_${activeSourceId}_frame_${frameIdx}`;
+            if (browserSideFrameMatrixCache[cacheKey]) {
+                currentActiveFrameData = browserSideFrameMatrixCache[cacheKey];
+                return;
+            }
+            const frameRes = await fetch(`${API_BASE}/api/weather/frame?model=${activeModelId}&source=${activeSourceId}&frame=${frameIdx}`);
+            const data = await frameRes.json();
+            browserSideFrameMatrixCache[cacheKey] = data;
+            currentActiveFrameData = data;
+        }
+
+        async function triggerBackgroundCacheWarmup() {
+            const currentWarmupTargetModel = activeModelId;
+            const currentWarmupTargetSource = activeSourceId;
+            console.log("📡 Background sequential pre-fetch matrix initialized...");
+            for (let f = 0; f < timelineTimestamps.length; f++) {
+                if (currentWarmupTargetModel !== activeModelId || currentWarmupTargetSource !== activeSourceId) break;
+                const cacheKey = `${currentWarmupTargetModel}_${currentWarmupTargetSource}_frame_${f}`;
+                if (!browserSideFrameMatrixCache[cacheKey]) {
+                    try {
+                        const res = await fetch(`${API_BASE}/api/weather/frame?model=${currentWarmupTargetModel}&source=${currentWarmupTargetSource}&frame=${f}`);
+                        const data = await res.json();
+                        browserSideFrameMatrixCache[cacheKey] = data;
+                        await new Promise(resolve => setTimeout(resolve, 60));
+                    } catch(e) {}
+                }
+            }
+            console.log("✅ Pre-fetch caching pipeline complete.");
+        }
+
+        // Tracks models rendered by this client session, keyed by modelId_sourceId
+        // Green state persists when switching models within same source, resets on source switch
+        const clientRenderedModels = new Set();
+
+        const ALL_MODEL_IDS = ['ecmwf_ifs', 'meteofrance_arome_france_hd', 'lamma_1k', 'icon_eu', 'meteofrance_arpege_europe'];
+
+        function applyDot(modelId, state) {
+            // state: 'loading' | 'loaded' | 'error' | 'missing' | 'none'
+            const dot = document.getElementById(`dot-${modelId}`);
+            const pill = document.getElementById(`pill-${modelId}`);
+            if (!dot || !pill) return;
+            const missingLabel = pill.querySelector('.grib-missing-label');
+            dot.style.background = ''; dot.style.boxShadow = '';
+            if (state === 'none') {
+                dot.style.display = 'none';
+                if (missingLabel) missingLabel.style.display = 'none';
+            } else if (state === 'missing') {
+                dot.style.display = 'none';
+                if (missingLabel) missingLabel.style.display = 'inline';
+            } else if (state === 'loading') {
+                dot.className = 'grib-dot';
+                dot.style.background = '#f59e0b';
+                dot.style.boxShadow = '0 0 5px rgba(245,158,11,0.7)';
+                dot.style.display = 'block';
+                if (missingLabel) missingLabel.style.display = 'none';
+            } else if (state === 'loaded') {
+                dot.className = 'grib-dot green';
+                dot.style.display = 'block';
+                if (missingLabel) missingLabel.style.display = 'none';
+            } else if (state === 'error') {
+                dot.className = 'grib-dot red';
+                dot.style.display = 'block';
+                if (missingLabel) missingLabel.style.display = 'none';
+            }
+        }
+
+        function setModelDot(modelId, state) {
+            if (state === 'loaded') clientRenderedModels.add(`${modelId}_${activeSourceId}`);
+            applyDot(modelId, state);
+        }
+
+        function isRendered(modelId) {
+            return clientRenderedModels.has(`${modelId}_${activeSourceId}`);
+        }
+
+        function initAllDotsRed() {
+            ALL_MODEL_IDS.forEach(id => {
+                const pill = document.getElementById(`pill-${id}`);
+                if (pill && pill.style.display !== 'none') applyDot(id, 'error');
+            });
+        }
+
+        async function refreshAllDots() {
+            if (activeSourceId === 'grib') {
+                try {
+                    const res = await fetch(`${API_BASE}/api/weather/grib-status`);
+                    const status = await res.json();
+                    for (const [modelId, info] of Object.entries(status)) {
+                        if (info.status === 'missing') {
+                            applyDot(modelId, 'missing');
+                        } else if (isRendered(modelId)) {
+                            applyDot(modelId, 'loaded');
+                        } else {
+                            applyDot(modelId, 'error');
+                        }
+                    }
+                } catch(e) {}
+            } else {
+                // API mode — red until rendered, green once cached this session
+                ALL_MODEL_IDS.forEach(id => {
+                    const pill = document.getElementById(`pill-${id}`);
+                    if (!pill || pill.style.display === 'none') return;
+                    applyDot(id, isRendered(id) ? 'loaded' : 'error');
+                });
+            }
+        }
+
+        const GRIB_ONLY_MODELS = ['lamma_1k'];
+
+        function applySourceVisibility() {
+            const isGrib = activeSourceId === 'grib';
+            GRIB_ONLY_MODELS.forEach(modelId => {
+                const pill = document.getElementById(`pill-${modelId}`);
+                if (!pill) return;
+                pill.style.display = isGrib ? '' : 'none';
+                // If the hidden model is active, fall back to ECMWF
+                if (!isGrib && activeModelId === modelId) {
+                    document.getElementById('pill-ecmwf_ifs').classList.add('active');
+                    pill.classList.remove('active');
+                    activeModelId = 'ecmwf_ifs';
+                }
+            });
+        }
+
+        async function switchDataSource(targetSourceId) {
+            if (targetSourceId === activeSourceId) return;
+            browserSideFrameMatrixCache = {};
+            document.querySelectorAll('.source-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(`src-${targetSourceId}`).classList.add('active');
+            activeSourceId = targetSourceId;
+            applySourceVisibility();
+            await refreshAllDots();
+            await executeSlicedModelSync();
+        }
+
+        async function switchActiveForecastModel(targetModelName) {
+            if (targetModelName === activeModelId) return;
+            browserSideFrameMatrixCache = {};
+            document.querySelectorAll('.model-pill').forEach(p => p.classList.remove('active'));
+            document.getElementById(`pill-${targetModelName}`).classList.add('active');
+            activeModelId = targetModelName;
+            document.getElementById('model-display-title').innerText = UX_RESOLUTION_TAGS[targetModelName] || targetModelName;
+            await executeSlicedModelSync();
+        }
+
+        // ── SailDesk header clock ──
+        function updateClock() {
+            const el = document.getElementById("header-time");
+            if (!el) return;
+            const s = new Intl.DateTimeFormat("en-GB", {
+                timeZone: "Europe/Rome",
+                hour: "2-digit", minute: "2-digit", second: "2-digit",
+                hour12: false
+            }).format(new Date());
+            el.textContent = `${s} CEST`;
+        }
+        updateClock();
+        setInterval(updateClock, 1000);
+
+        map.on('load', () => {
+            resizeParticleCanvas(); window.addEventListener('resize', resizeParticleCanvas);
+            map.on('move', () => { pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height); });
+            
+            document.getElementById('time-slider').addEventListener('input', async (e) => {
+                const targetScrubIdx = parseInt(e.target.value);
+                currentFrameIdx = targetScrubIdx;
+                await streamIsolatedFrame(targetScrubIdx);
+                if (currentFrameIdx === targetScrubIdx) renderCurrentFrameToCanvas();
+            });
+
+            applySourceVisibility();
+            initAllDotsRed();
+            executeSlicedModelSync().then(() => { initParticlePool(); buildParticleStreamlineOverlay(); refreshAllDots(); });
+        });
+    </script>
+</body>
+</html>
