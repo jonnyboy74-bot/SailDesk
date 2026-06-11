@@ -14,7 +14,7 @@
             --font:    system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
             --header:  48px;
             --timebar: 46px;
-            --drawer-h: 340px;
+            --drawer-h: 380px;
             --bg:      #f8fafc;
             --surface: #ffffff;
             --border:  #e2e8f0;
@@ -104,10 +104,10 @@
         /* ── Map model pill box ── */
         #model-pill-box {
             position: absolute; top: 10px; right: 10px; z-index: 12;
-            background: rgba(30,41,59,.92); backdrop-filter: blur(8px);
+            background: rgba(27,58,92,.96); backdrop-filter: blur(8px);
             padding: 8px; border-radius: 12px;
             display: flex; flex-direction: column; gap: 6px;
-            border: 1px solid rgba(255,255,255,.1); box-shadow: 0 10px 30px rgba(0,0,0,.3);
+            border: 1px solid rgba(255,255,255,.15); box-shadow: 0 10px 30px rgba(0,0,0,.3);
         }
         #source-toggle-zone { display: flex; background: rgba(0,0,0,.25); padding: 2px; border-radius: 6px; margin-bottom: 2px; }
         .source-btn {
@@ -132,21 +132,21 @@
 
         /* ── Time bar ── */
         #time-bar {
-            height: var(--timebar); background: #0f172a; display: flex; align-items: center;
-            gap: 12px; padding: 0 14px; flex-shrink: 0; border-top: 1px solid rgba(255,255,255,.08);
+            height: var(--timebar); background: var(--navy); display: flex; align-items: center;
+            gap: 12px; padding: 0 14px; flex-shrink: 0; border-top: 1px solid rgba(255,255,255,.12);
             z-index: 20; position: relative; overflow: visible;
         }
         #play-btn {
-            width: 28px; height: 28px; border-radius: 50%; background: #334155; border: none;
-            color: #e2e8f0; font-size: 12px; cursor: pointer; display: flex; align-items: center;
+            width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,.15); border: none;
+            color: #fff; font-size: 12px; cursor: pointer; display: flex; align-items: center;
             justify-content: center; flex-shrink: 0; transition: background .15s;
         }
-        #play-btn:hover { background: #475569; }
+        #play-btn:hover { background: rgba(255,255,255,.25); }
         #time-label {
-            font-size: 11px; font-family: monospace; color: #94a3b8; white-space: nowrap;
+            font-size: 11px; font-family: monospace; color: rgba(255,255,255,.6); white-space: nowrap;
             min-width: 130px; flex-shrink: 0;
         }
-        #time-label strong { color: #e2e8f0; }
+        #time-label strong { color: #fff; }
         #slider-wrap { flex: 1; display: flex; flex-direction: column; }
         #time-slider {
             width: 100%; -webkit-appearance: none; appearance: none;
@@ -161,21 +161,21 @@
         #time-axis { position: relative; height: 18px; margin-top: 2px; }
         #time-axis .ta-tick {
             position: absolute; transform: translateX(-50%);
-            font-size: 8.5px; color: #64748b; font-family: monospace;
+            font-size: 8.5px; color: rgba(255,255,255,.4); font-family: monospace;
             white-space: nowrap; line-height: 1;
         }
         #time-axis .ta-tick.ta-day {
-            color: #cbd5e1; font-weight: 700;
+            color: rgba(255,255,255,.85); font-weight: 700;
         }
         #time-axis .ta-tick::before {
             content: ''; display: block; width: 1px; height: 4px;
-            background: #475569; margin: 0 auto 1px;
+            background: rgba(255,255,255,.25); margin: 0 auto 1px;
         }
 
         /* ── Wind scale bar ── */
         #wind-scale {
-            background: #0a1020; flex-shrink: 0; padding: 4px 14px 5px 56px;
-            border-top: 1px solid rgba(255,255,255,.05);
+            background: var(--navy); flex-shrink: 0; padding: 4px 14px 5px 56px;
+            border-top: 1px solid rgba(255,255,255,.08);
         }
         #wind-scale-bar {
             height: 10px; border-radius: 3px;
@@ -187,7 +187,7 @@
         #wind-scale-labels {
             display: flex; justify-content: space-between; margin-top: 2px;
         }
-        #wind-scale-labels span { font-size: 8.5px; color: #94a3b8; font-family: monospace; }
+        #wind-scale-labels span { font-size: 8.5px; color: rgba(255,255,255,.55); font-family: monospace; }
 
         /* ── Comparison drawer ── */
         #comparison-drawer {
@@ -212,14 +212,6 @@
 
         .tb-label { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 
-        /* Source toggle */
-        .tb-source { display: flex; background: #e2e8f0; border-radius: 5px; padding: 2px; gap: 2px; }
-        .tb-src-btn {
-            border: none; background: transparent; color: var(--muted); padding: .18rem .6rem;
-            font-size: .7rem; font-weight: 700; border-radius: 4px; cursor: pointer; font-family: var(--font);
-        }
-        .tb-src-btn.active { background: var(--navy); color: #fff; }
-
         /* Hours toggle */
         .tb-hours { display: flex; background: #e2e8f0; border-radius: 5px; padding: 2px; gap: 2px; }
         .tb-hr-btn {
@@ -228,21 +220,21 @@
         }
         .tb-hr-btn.active { background: var(--accent); color: #fff; }
 
-        /* Metric tabs */
+        /* Metric tabs — same style as hours */
         .tb-metric { display: flex; background: #e2e8f0; border-radius: 5px; padding: 2px; gap: 2px; }
         .tb-metric-btn {
             border: none; background: transparent; color: var(--muted); padding: .18rem .6rem;
             font-size: .7rem; font-weight: 700; border-radius: 4px; cursor: pointer; font-family: var(--font);
         }
-        .tb-metric-btn.active { background: #0f172a; color: #fff; }
+        .tb-metric-btn.active { background: var(--accent); color: #fff; }
 
         /* Model picker */
         #tbl-models-btn {
-            border: 1px solid var(--border); background: var(--surface); color: var(--navy);
+            border: none; background: var(--accent); color: #fff;
             padding: .2rem .65rem; border-radius: 5px; font-size: .72rem; font-weight: 700;
             cursor: pointer; display: flex; align-items: center; gap: .3rem; font-family: var(--font);
         }
-        #tbl-models-btn:hover { border-color: var(--accent); }
+        #tbl-models-btn:hover { opacity: .85; }
         #tbl-models-panel {
             position: fixed; z-index: 200; background: var(--surface);
             border: 1px solid var(--border); border-radius: 8px;
@@ -263,9 +255,20 @@
         /* ── Table ── */
         #drawer-body { flex: 1; overflow: hidden; min-height: 0; }
         .wx-table-wrap {
-            overflow-x: auto; overflow-y: auto;
+            overflow-x: auto; overflow-y: hidden;
             height: 100%;
             scroll-behavior: auto; /* JS controls smooth/instant */
+            cursor: grab;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .wx-table-wrap * {
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .wx-table-wrap.is-dragging {
+            cursor: grabbing;
+            scroll-behavior: auto;
         }
         /* Always-visible thin scrollbar so user knows it scrolls */
         .wx-table-wrap::-webkit-scrollbar { height: 5px; width: 5px; }
@@ -310,7 +313,7 @@
         .wx-wind-table tbody td {
             border-bottom: 1px solid var(--border);
             border-right: 1px solid rgba(180,190,210,.2);
-            padding: 0; text-align: center; height: 62px; width: 66px; min-width: 66px;
+            padding: 0; text-align: center; height: 56px; width: 66px; min-width: 66px;
         }
         .wx-wind-table tbody td.wx-model-cell {
             position: sticky; left: 0; z-index: 5;
@@ -320,6 +323,7 @@
         .wx-wind-table tbody td.wx-col-now { outline: 2px solid rgba(37,99,235,.35); outline-offset: -2px; }
         .wx-model-name { font-weight: 700; font-size: .78rem; color: var(--navy); }
         .wx-model-sub  { font-size: .63rem; color: var(--muted); margin-top: .1rem; }
+        .wx-model-run  { font-size: .6rem; color: #94a3b8; margin-top: .15rem; font-family: var(--font); }
         .wx-cell {
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             height: 100%; padding: .15rem; gap: .03rem; cursor: default;
@@ -338,13 +342,12 @@
         /* ── Drawer open/close button ── */
         #drawer-fab {
             position: absolute; bottom: 12px; right: 14px; z-index: 13;
-            background: rgba(15,23,42,.85); color: #e2e8f0; border: 1px solid rgba(255,255,255,.15);
+            background: var(--accent); color: #fff; border: none;
             padding: 6px 14px; border-radius: 20px; font-size: .72rem; font-weight: 700;
             cursor: pointer; display: flex; align-items: center; gap: 6px;
-            backdrop-filter: blur(6px); font-family: var(--font);
-            transition: background .15s;
+            font-family: var(--font); transition: opacity .15s;
         }
-        #drawer-fab:hover { background: rgba(30,41,59,.95); }
+        #drawer-fab:hover { opacity: .85; }
     </style>
 </head>
 <body>
@@ -380,23 +383,23 @@
                     <button id="src-api"  class="source-btn active" onclick="switchDataSource('api')">Cloud API</button>
                     <button id="src-grib" class="source-btn"        onclick="switchDataSource('grib')">Local GRIB</button>
                 </div>
-                <button class="model-pill active" id="pill-ecmwf_ifs" onclick="switchActiveForecastModel('ecmwf_ifs')">
+                <button class="model-pill active" id="pill-ecmwf_ifs" onclick="switchActiveForecastModel('ecmwf_ifs')" onmouseenter="hoverPrewarm('ecmwf_ifs')">
                     <span>ECMWF</span><span class="model-res-tag">9km</span>
                     <span class="grib-missing-label">No GRIB</span><span class="grib-dot" id="dot-ecmwf_ifs"></span>
                 </button>
-                <button class="model-pill" id="pill-meteofrance_arome_france_hd" onclick="switchActiveForecastModel('meteofrance_arome_france_hd')">
+                <button class="model-pill" id="pill-meteofrance_arome_france_hd" onclick="switchActiveForecastModel('meteofrance_arome_france_hd')" onmouseenter="hoverPrewarm('meteofrance_arome_france_hd')">
                     <span>AROME HD</span><span class="model-res-tag">1.5km</span>
                     <span class="grib-missing-label">No GRIB</span><span class="grib-dot" id="dot-meteofrance_arome_france_hd"></span>
                 </button>
-                <button class="model-pill" id="pill-lamma_1k" onclick="switchActiveForecastModel('lamma_1k')">
+                <button class="model-pill" id="pill-lamma_1k" onclick="switchActiveForecastModel('lamma_1k')" onmouseenter="hoverPrewarm('lamma_1k')">
                     <span>LaMMA</span><span class="model-res-tag">1km</span>
                     <span class="grib-missing-label">No GRIB</span><span class="grib-dot" id="dot-lamma_1k"></span>
                 </button>
-                <button class="model-pill" id="pill-icon_eu" onclick="switchActiveForecastModel('icon_eu')">
+                <button class="model-pill" id="pill-icon_eu" onclick="switchActiveForecastModel('icon_eu')" onmouseenter="hoverPrewarm('icon_eu')">
                     <span>ICON</span><span class="model-res-tag">7km</span>
                     <span class="grib-missing-label">No GRIB</span><span class="grib-dot" id="dot-icon_eu"></span>
                 </button>
-                <button class="model-pill" id="pill-meteofrance_arpege_europe" onclick="switchActiveForecastModel('meteofrance_arpege_europe')">
+                <button class="model-pill" id="pill-meteofrance_arpege_europe" onclick="switchActiveForecastModel('meteofrance_arpege_europe')" onmouseenter="hoverPrewarm('meteofrance_arpege_europe')">
                     <span>ARPEGE</span><span class="model-res-tag">11km</span>
                     <span class="grib-missing-label">No GRIB</span><span class="grib-dot" id="dot-meteofrance_arpege_europe"></span>
                 </button>
@@ -422,20 +425,14 @@
         <!-- ── Comparison drawer ── -->
         <div id="comparison-drawer">
             <div id="drawer-toolbar">
-                <span class="tb-label">Source</span>
-                <div class="tb-source">
-                    <button class="tb-src-btn active" id="tbl-src-om"   onclick="setTableSource('om')">OM</button>
-                    <button class="tb-src-btn"        id="tbl-src-grib" onclick="setTableSource('grib')">GRIB</button>
-                </div>
-
-                <span class="tb-label" style="margin-left:.4rem;">Hours</span>
+                <span class="tb-label">Hours</span>
                 <div class="tb-hours">
-                    <button class="tb-hr-btn active" id="tbl-hr-race" onclick="setHoursMode('race')">Race</button>
+                    <button class="tb-hr-btn active" id="tbl-hr-full" onclick="setHoursMode('full')">Full</button>
                     <button class="tb-hr-btn"        id="tbl-hr-24"   onclick="setHoursMode('24hr')">24 HR</button>
-                    <button class="tb-hr-btn"        id="tbl-hr-full" onclick="setHoursMode('full')">Full</button>
+                    <button class="tb-hr-btn"        id="tbl-hr-race" onclick="setHoursMode('race')">Race</button>
                 </div>
 
-                <span class="tb-label" style="margin-left:.4rem;">View</span>
+                <span class="tb-label" style="margin-left:1rem;">View</span>
                 <div class="tb-metric">
                     <button class="tb-metric-btn active" id="tbl-metric-wind" onclick="setTableMetric('wind')">Wind</button>
                     <button class="tb-metric-btn"        id="tbl-metric-cape" onclick="setTableMetric('cape')">CAPE</button>
@@ -800,7 +797,8 @@
             updateTimeDisplay();buildTimeAxis();
             initWeatherCanvas();await renderCurrentFrameToCanvas();mountOrUpdateWeatherLayer();
             document.getElementById('loading-indicator').style.display='none';
-            setModelDot(activeModelId,'loaded');triggerBackgroundCacheWarmup();
+            setModelDot(activeModelId,'loaded');
+            triggerBackgroundCacheWarmup().then(()=>warmupAllLoadedModels());
         } catch(e){
             document.getElementById('loading-indicator').style.color='#ff3333';
             document.getElementById('loading-indicator').innerText='Sync Mismatch Error';
@@ -828,8 +826,33 @@
             const k=`${m}_${s}_frame_${f}`;
             if(!browserSideFrameMatrixCache[k]){
                 try{const r=await fetch(`${API_BASE}/api/weather/frame?model=${m}&source=${s}&frame=${f}`);
-                    const d=await r.json();browserSideFrameMatrixCache[k]=d;await new Promise(res=>setTimeout(res,60));}catch(e){}
+                    const d=await r.json();browserSideFrameMatrixCache[k]=d;await new Promise(res=>setTimeout(res,40));}catch(e){}
             }
+        }
+    }
+
+    async function warmupAllLoadedModels(){
+        // After the active model is warmed up, silently pre-warm all other loaded models
+        // so switching between them feels instant
+        for(const modelId of ALL_MAP_MODEL_IDS){
+            if(modelId===activeModelId) continue;
+            const src=activeSourceId;
+            try{
+                const r=await fetch(`${API_BASE}/api/weather/metadata?model=${modelId}&source=${src}`);
+                const d=await r.json();
+                if(d.error||!d.timestamps) continue;
+                const frames=d.timestamps.length;
+                for(let f=0;f<frames;f++){
+                    const k=`${modelId}_${src}_frame_${f}`;
+                    if(browserSideFrameMatrixCache[k]) continue;
+                    try{
+                        const fr=await fetch(`${API_BASE}/api/weather/frame?model=${modelId}&source=${src}&frame=${f}`);
+                        const fd=await fr.json();
+                        browserSideFrameMatrixCache[k]=fd;
+                        await new Promise(res=>setTimeout(res,40));
+                    }catch(e){}
+                }
+            }catch(e){}
         }
     }
 
@@ -873,17 +896,27 @@
 
     async function switchDataSource(src){
         if(src===activeSourceId) return;
-        browserSideFrameMatrixCache={};
+        // Do NOT clear cache — keys include source, so all cached frames stay valid
         document.querySelectorAll('.source-btn').forEach(b=>b.classList.remove('active'));
         document.getElementById(`src-${src}`).classList.add('active');
         activeSourceId=src;applySourceVisibility();await refreshAllDots();await executeSlicedModelSync();
+        syncTableSource(); // table follows map source
     }
     async function switchActiveForecastModel(name){
         if(name===activeModelId) return;
-        browserSideFrameMatrixCache={};
+        // Do NOT clear cache — keys include model name, switching back is instant
         document.querySelectorAll('.model-pill').forEach(p=>p.classList.remove('active'));
         document.getElementById(`pill-${name}`).classList.add('active');
         activeModelId=name;await executeSlicedModelSync();
+    }
+
+    function hoverPrewarm(modelId){
+        // Start fetching the first frame of a model on hover so click feels instant
+        if(modelId===activeModelId) return;
+        const k=`${modelId}_${activeSourceId}_frame_${currentFrameIdx}`;
+        if(browserSideFrameMatrixCache[k]) return;
+        fetch(`${API_BASE}/api/weather/frame?model=${modelId}&source=${activeSourceId}&frame=${currentFrameIdx}`)
+            .then(r=>r.json()).then(d=>{browserSideFrameMatrixCache[k]=d;}).catch(()=>{});
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -958,24 +991,23 @@
     // ═══════════════════════════════════════════════════════════
     let tableSource = 'om';
     let tableMetric = 'wind';
-    let tableHoursMode = 'race';
+    let tableHoursMode = 'full';
     let tableData = {};
     let selectedTableModels = new Set(['ecmwf_ifs','icon_eu','meteofrance_arpege_europe','meteofrance_arome_france_hd']);
     let tableRefreshTimer = null;
     let drawerOpen = false;
 
-    function setTableSource(src){
-        tableSource=src;
-        document.getElementById('tbl-src-om').classList.toggle('active',src==='om');
-        document.getElementById('tbl-src-grib').classList.toggle('active',src==='grib');
+    function syncTableSource(){
+        // Table source mirrors the map: Cloud API → OM, Local GRIB → grib
+        tableSource = activeSourceId === 'grib' ? 'grib' : 'om';
         rebuildModelPanel();
-        if(drawerOpen) fetchTableData();
+        scheduleTableRefresh(0);
     }
     function setHoursMode(mode){
         tableHoursMode=mode;
-        document.getElementById('tbl-hr-race').classList.toggle('active',mode==='race');
-        document.getElementById('tbl-hr-24').classList.toggle('active',mode==='24hr');
         document.getElementById('tbl-hr-full').classList.toggle('active',mode==='full');
+        document.getElementById('tbl-hr-24').classList.toggle('active',mode==='24hr');
+        document.getElementById('tbl-hr-race').classList.toggle('active',mode==='race');
         renderTable();
         updateTableHighlight(true);
     }
@@ -1026,7 +1058,8 @@
             }
             renderTable();
             updateTableHighlight(true); // scroll to current slider position after fetch
-            document.getElementById('tbl-status').textContent=`${Object.keys(tableData).length} models • ${pinLat.toFixed(3)}°, ${pinLon.toFixed(3)}°`;
+            const srcLabel = tableSource==='grib' ? 'Local GRIB' : 'Cloud API';
+            document.getElementById('tbl-status').textContent=`${srcLabel} • ${Object.keys(tableData).length} models • ${pinLat.toFixed(3)}°, ${pinLon.toFixed(3)}°`;
         } catch(e){
             document.getElementById('tbl-status').textContent='Fetch failed';
         }
@@ -1197,19 +1230,31 @@
             th.classList.add('wx-time-col');
             if(dayBreaks[ci]) th.classList.add('wx-day-break');
             if(ci===nowCol) th.classList.add('wx-col-now');
-            th.addEventListener('click',()=>jumpToTableColumn(ts, th));
+            th.addEventListener('click',()=>{ if(!_tableDragOccurred) jumpToTableColumn(ts, th); });
             hr.appendChild(th);
         });
         const tbody=tbl.createTBody();
         ids.forEach(id=>{
             const d=tableData[id],tr=tbody.insertRow();
             const ltd=document.createElement('td');ltd.className='wx-model-cell';
-            ltd.innerHTML=`<div class="wx-model-name">${d.label}</div><div class="wx-model-sub">${d.source} ${d.res}</div>`;
+            const runTs=d.timestamps?.[0];
+            let runStr='';
+            if(runTs){
+                const rd=new Date(runTs.endsWith('Z')?runTs:runTs+'Z');
+                runStr=rd.toLocaleString('en-US',{timeZone:'Europe/Rome',weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});
+            }
+            const runHtml = runStr ? `<div class="wx-model-run">from ${runStr}</div>` : '';
+            ltd.innerHTML=`<div class="wx-model-name">${d.label}</div><div class="wx-model-sub">${d.source} ${d.res}</div>${runHtml}`;
             tr.appendChild(ltd);
-            cols.forEach(({i:di},ci)=>{
+            cols.forEach(({ts:cts,i:di},ci)=>{
                 const td=document.createElement('td');
                 if(ci===nowCol) td.classList.add('wx-col-now');
                 if(dayBreaks[ci]) td.classList.add('wx-day-break');
+                td.style.cursor='pointer';
+                td.addEventListener('click', ()=>{
+                    if(_tableDragOccurred) return;
+                    jumpToTableColumn(cts, document.querySelectorAll('#wx-table-wrap thead th')[ci+1]);
+                });
                 if(tableMetric==='wind') renderWindCell(td,d.tws?.[di],d.twd?.[di],d.gust?.[di]);
                 else renderCapeCell(td,d.cape?.[di]);
                 tr.appendChild(td);
@@ -1290,6 +1335,61 @@
     document.addEventListener('click',()=>{document.getElementById('tbl-models-panel').classList.remove('open');});
 
     // ═══════════════════════════════════════════════════════════
+    // DRAG-TO-SCROLL TABLE
+    // ═══════════════════════════════════════════════════════════
+    // Set on the wrap so renderTable cells can read it
+    let _tableDragOccurred = false;
+
+    function initTableDragScroll(){
+        const wrap = document.getElementById('wx-table-wrap');
+        let isDragging = false, startX, startY, scrollLeft, scrollTop;
+
+        wrap.addEventListener('mousedown', e => {
+            if(e.target.closest('input')) return;
+            e.preventDefault(); // stops text selection on drag
+            isDragging = true;
+            _tableDragOccurred = false;
+            wrap.classList.add('is-dragging');
+            startX = e.pageX - wrap.offsetLeft;
+            startY = e.pageY - wrap.offsetTop;
+            scrollLeft = wrap.scrollLeft;
+            scrollTop  = wrap.scrollTop;
+        });
+
+        const stopDrag = () => { isDragging = false; wrap.classList.remove('is-dragging'); };
+        wrap.addEventListener('mouseleave', stopDrag);
+        wrap.addEventListener('mouseup',   stopDrag);
+
+        wrap.addEventListener('mousemove', e => {
+            if(!isDragging) return;
+            e.preventDefault();
+            const x = e.pageX - wrap.offsetLeft;
+            const y = e.pageY - wrap.offsetTop;
+            const dx = x - startX, dy = y - startY;
+            if(Math.abs(dx) > 4 || Math.abs(dy) > 4) _tableDragOccurred = true;
+            wrap.scrollLeft = scrollLeft - dx * 1.4;
+            wrap.scrollTop  = scrollTop  - dy * 1.4;
+        });
+
+        // Touch support
+        let touchStartX, touchStartY, touchScrollLeft, touchScrollTop;
+        wrap.addEventListener('touchstart', e => {
+            touchStartX     = e.touches[0].pageX;
+            touchStartY     = e.touches[0].pageY;
+            touchScrollLeft = wrap.scrollLeft;
+            touchScrollTop  = wrap.scrollTop;
+            _tableDragOccurred = false;
+        }, {passive: true});
+        wrap.addEventListener('touchmove', e => {
+            const dx = touchStartX - e.touches[0].pageX;
+            const dy = touchStartY - e.touches[0].pageY;
+            if(Math.abs(dx) > 4 || Math.abs(dy) > 4) _tableDragOccurred = true;
+            wrap.scrollLeft = touchScrollLeft + dx;
+            wrap.scrollTop  = touchScrollTop  + dy;
+        }, {passive: true});
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // CLOCK
     // ═══════════════════════════════════════════════════════════
     function updateClock(){
@@ -1321,6 +1421,7 @@
         });
 
         initPin();
+        initTableDragScroll();
         rebuildModelPanel();
         applySourceVisibility();
         initAllDotsRed();

@@ -46,8 +46,19 @@ def find_latest_grib(config: dict) -> str | None:
     return os.path.join(GRIB_DIR, matches[0]) if matches else None
 
 def cleanup_old_gribs():
-    """Keep only the most recent .grb2 file per model prefix; delete older ones."""
-    print("\n🧹 Running GRIB cleanup — keeping latest file per model...")
+    """Keep only the most recent .grb2 file per model prefix; delete older ones and all .idx files."""
+    print("\n🧹 Running GRIB cleanup...")
+
+    # Always delete ALL .idx files — cfgrib rebuilds them; stale/corrupt ones cause EOFError
+    for f in os.listdir(GRIB_DIR):
+        if f.endswith(".idx"):
+            try:
+                os.remove(os.path.join(GRIB_DIR, f))
+                print(f"  🗑️  Removed index: {f}")
+            except Exception:
+                pass
+
+    # Keep only latest .grb2 per model prefix
     for model_id, config in MODEL_CONFIG.items():
         prefix = config["grib_prefix"]
         matches = sorted(
@@ -79,7 +90,17 @@ def generate_float_range(start, end, step):
             curr += step
     return res
 
+def delete_idx_for_grib(file_path: str):
+    """Remove any .idx sidecar files for a given .grb2 so cfgrib rebuilds them cleanly."""
+    for f in os.listdir(os.path.dirname(file_path)):
+        if f.startswith(os.path.basename(file_path)) and f.endswith(".idx"):
+            try:
+                os.remove(os.path.join(os.path.dirname(file_path), f))
+            except Exception:
+                pass
+
 def parse_and_regrid_grib(file_path: str):
+    delete_idx_for_grib(file_path)  # always start clean
     import cfgrib
     datasets = cfgrib.open_datasets(file_path)
     ds = None
@@ -408,22 +429,138 @@ def get_om_models():
 
 
 def warm_up_local_grib_registry():
-    print("\n🔥 Warming up local GRIB memory matrices via ADAPTIVE normalizations...")
+    """Parse and cache every GRIB file found in GRIB_DIR into MASTER_WEATHER_REGISTRY."""
+    print("\n🔥 Pre-loading GRIB files into memory...")
     for model_id, config in MODEL_CONFIG.items():
         file_path = find_latest_grib(config)
         if file_path and os.path.exists(file_path):
+            cache_key = f"{model_id}_grib"
             fname = os.path.basename(file_path)
-            print(f"📦 Pre-loading {model_id.upper()} ({fname}) into memory layers...")
+            mtime = os.path.getmtime(file_path)
+            tracking_tag = f"{cache_key}_{mtime}"
+            if tracking_tag in MASTER_WEATHER_REGISTRY:
+                print(f"  ✅ {model_id.upper()} already in memory — skipping.")
+                continue
+            print(f"  📦 Loading {model_id.upper()} ({fname})...")
             try:
-                cache_key = f"{model_id}_grib"
-                MASTER_WEATHER_REGISTRY[cache_key] = parse_and_regrid_grib(file_path)
-                print(f"✅ {model_id.upper()} successfully armed.")
+                data = parse_and_regrid_grib(file_path)
+                MASTER_WEATHER_REGISTRY[cache_key]      = data
+                MASTER_WEATHER_REGISTRY[tracking_tag]   = data
+                print(f"  ✅ {model_id.upper()} ready ({len(data['timestamps'])} frames).")
             except Exception as e:
-                print(f"⚠️ Failed to pre-load {fname}: {e}")
-    print("🎉 Memory alignment complete. Server is active.\n")
+                print(f"  ⚠️  {model_id.upper()} failed: {e}")
+    print("🎉 GRIB pre-load complete.\n")
+
+API_REFRESH_HOURS = 3  # re-fetch Open-Meteo grids every 3 hours
+
+async def load_all_api_models(force=False):
+    """
+    Fetch Open-Meteo grid data for every unique API model.
+    Deduplicates: lamma_1k shares icon_eu's grid so it's only fetched once.
+    Set force=True to refresh even if already cached.
+    """
+    lats = generate_float_range(API_LAT_START, API_LAT_END, API_LAT_STEP)
+    lons = generate_float_range(API_LON_START, API_LON_END, API_LON_STEP)
+    nx, ny = len(lons), len(lats)
+
+    # Deduplicate: map unique api_model slug → list of cache keys that share it
+    api_model_to_keys: dict = {}
+    GRIB_ONLY_MODELS = {"lamma_1k"}  # no real API equivalent
+    for model_id, config in MODEL_CONFIG.items():
+        if model_id in GRIB_ONLY_MODELS:
+            continue
+        api_slug = config.get("api_model")
+        if not api_slug:
+            continue
+        api_model_to_keys.setdefault(api_slug, []).append(f"{model_id}_api")
+
+    for api_slug, cache_keys in api_model_to_keys.items():
+        primary_key = cache_keys[0]
+        if not force and primary_key in MASTER_WEATHER_REGISTRY:
+            continue
+        print(f"  🌐 {'Refreshing' if force else 'Loading'} API model {api_slug.upper()}...")
+        try:
+            data = await process_live_web_api(api_slug, OPENMETEO_API_KEY, nx, ny, lats, lons)
+            for key in cache_keys:          # share the same grid object for all aliases
+                MASTER_WEATHER_REGISTRY[key] = data
+            print(f"  ✅ {api_slug.upper()} ready ({len(data['timestamps'])} frames) → {cache_keys}")
+        except Exception as e:
+            print(f"  ⚠️  {api_slug.upper()} API failed: {e}")
+
+async def api_refresh_loop():
+    """Refresh all Cloud API grids every API_REFRESH_HOURS hours."""
+    while True:
+        await asyncio.sleep(API_REFRESH_HOURS * 3600)
+        print(f"\n🔄 Scheduled API refresh (every {API_REFRESH_HOURS}h)...")
+        await load_all_api_models(force=True)
+        print("✅ API refresh complete.\n")
+
+def reload_grib_if_changed(model_id: str, config: dict) -> bool:
+    """
+    Check if the latest GRIB file for a model is newer than what's cached.
+    If so, parse and replace the registry entry. Returns True if reloaded.
+    """
+    file_path = find_latest_grib(config)
+    if not file_path or not os.path.exists(file_path):
+        return False
+    cache_key = f"{model_id}_grib"
+    mtime = os.path.getmtime(file_path)
+    tracking_tag = f"{cache_key}_{mtime}"
+    if tracking_tag in MASTER_WEATHER_REGISTRY:
+        return False  # already current
+    fname = os.path.basename(file_path)
+    print(f"  📦 New GRIB detected for {model_id.upper()} ({fname}) — reloading...")
+    try:
+        # Remove stale tracking tags for this model
+        stale = [k for k in MASTER_WEATHER_REGISTRY if k.startswith(cache_key + "_")]
+        for k in stale:
+            del MASTER_WEATHER_REGISTRY[k]
+        data = parse_and_regrid_grib(file_path)
+        MASTER_WEATHER_REGISTRY[cache_key]    = data
+        MASTER_WEATHER_REGISTRY[tracking_tag] = data
+        print(f"  ✅ {model_id.upper()} reloaded ({len(data['timestamps'])} frames).")
+        return True
+    except Exception as e:
+        print(f"  ⚠️  {model_id.upper()} reload failed: {e}")
+        return False
+
+async def grib_watch_loop():
+    """
+    Every 2 minutes: scan for new/updated GRIB files, reload changed ones,
+    and clean up old files from disk.
+    """
+    loop = asyncio.get_event_loop()
+    while True:
+        await asyncio.sleep(120)  # check every 2 minutes
+        any_new = False
+        for model_id, config in MODEL_CONFIG.items():
+            changed = await loop.run_in_executor(
+                None, reload_grib_if_changed, model_id, config
+            )
+            if changed:
+                any_new = True
+        if any_new:
+            # Clean up old GRIB files now that new ones are loaded
+            await loop.run_in_executor(None, cleanup_old_gribs)
+            print("🧹 Old GRIBs cleaned up after reload.\n")
+
+@app.on_event("startup")
+async def on_startup():
+    """
+    Server is available immediately on startup.
+    - GRIBs parse in a background thread (non-blocking, ~30s)
+    - API grids fetch in background async tasks (non-blocking, ~2min)
+    - API grids auto-refresh every 3 hours
+    Any request before warmup completes falls through to lazy-loading.
+    """
+    cleanup_old_gribs()
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, warm_up_local_grib_registry)  # background thread
+    asyncio.create_task(load_all_api_models())                # background async
+    asyncio.create_task(api_refresh_loop())                   # refreshes every 3h
+    asyncio.create_task(grib_watch_loop())                    # watches for new GRIBs every 2min
 
 if __name__ == "__main__":
     import uvicorn
-    cleanup_old_gribs()
-    warm_up_local_grib_registry()
+    uvicorn.run(app, host="0.0.0.0", port=8000)
     uvicorn.run(app, host="0.0.0.0", port=8000)
