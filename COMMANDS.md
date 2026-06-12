@@ -46,7 +46,17 @@ docker compose up --build -d
 
 ## Logs
 
-**Follow live logs:**
+**Restart and immediately follow logs:**
+```bash
+docker compose restart && docker logs -f saildesk
+```
+
+**Rebuild and follow logs (after code changes):**
+```bash
+docker compose up --build -d && docker logs -f saildesk
+```
+
+**Follow live logs only:**
 ```bash
 docker logs saildesk -f
 ```
@@ -54,6 +64,11 @@ docker logs saildesk -f
 **Last 50 lines:**
 ```bash
 docker logs saildesk --tail 50
+```
+
+**Filter for key events only (loaded / failed / complete):**
+```bash
+docker logs saildesk 2>&1 | grep -E "ready|failed|complete|Error"
 ```
 
 **Stop watching logs:** `Ctrl+C` (server keeps running)

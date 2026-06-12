@@ -228,6 +228,12 @@
         }
         .tb-metric-btn.active { background: var(--accent); color: #fff; }
 
+        /* Model picker separator */
+        .tbl-panel-sep {
+            font-size: .6rem; color: #94a3b8; text-align: center;
+            padding: .3rem .5rem .1rem; letter-spacing: .05em; text-transform: uppercase;
+        }
+
         /* Model picker */
         #tbl-models-btn {
             border: none; background: var(--accent); color: #fff;
@@ -295,7 +301,7 @@
             background: #e2e8f0; color: var(--navy);
         }
         .wx-wind-table thead th.wx-model-col {
-            text-align: left; padding-left: .9rem; min-width: 130px;
+            text-align: left; padding-left: .9rem; min-width: 180px;
             position: sticky; top: 0; left: 0; z-index: 20;
             background: var(--bg); border-right: 1px solid var(--border);
         }
@@ -318,12 +324,15 @@
         .wx-wind-table tbody td.wx-model-cell {
             position: sticky; left: 0; z-index: 5;
             background: var(--surface); text-align: left;
-            padding: .35rem .9rem; border-right: 1px solid var(--border); min-width: 130px;
+            padding: .35rem .9rem; border-right: 1px solid var(--border);
+            min-width: 180px; max-width: 180px; overflow: hidden;
         }
         .wx-wind-table tbody td.wx-col-now { outline: 2px solid rgba(37,99,235,.35); outline-offset: -2px; }
-        .wx-model-name { font-weight: 700; font-size: .78rem; color: var(--navy); }
-        .wx-model-sub  { font-size: .63rem; color: var(--muted); margin-top: .1rem; }
-        .wx-model-run  { font-size: .6rem; color: #94a3b8; margin-top: .15rem; font-family: var(--font); }
+        .wx-model-name { font-weight: 700; font-size: .78rem; color: var(--navy); line-height: 1.3;
+                         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .wx-model-sub  { font-size: .63rem; color: var(--muted); font-weight: 400; margin-left: .25rem; }
+        .wx-model-run  { font-size: .6rem; color: #94a3b8; margin-top: .18rem; font-family: monospace;
+                         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .wx-cell {
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             height: 100%; padding: .15rem; gap: .03rem; cursor: default;
@@ -339,15 +348,19 @@
         .mapboxgl-ctrl-logo { display: none !important; }
         .mapboxgl-ctrl-attrib { display: none !important; }
 
-        /* ── Drawer open/close button ── */
+        /* ── Pin coords: hidden (shown in comp table status bar) ── */
+        #pin-coords { display: none; }
+
+        /* ── Drawer toggle pill — lives inside model-pill-box ── */
         #drawer-fab {
-            position: absolute; bottom: 12px; right: 14px; z-index: 13;
-            background: var(--accent); color: #fff; border: none;
-            padding: 6px 14px; border-radius: 20px; font-size: .72rem; font-weight: 700;
-            cursor: pointer; display: flex; align-items: center; gap: 6px;
-            font-family: var(--font); transition: opacity .15s;
+            background: transparent; color: rgba(255,255,255,.75); border: 1px solid rgba(255,255,255,.25);
+            padding: 3px 10px; border-radius: 12px; font-size: .68rem; font-weight: 600;
+            cursor: pointer; display: flex; align-items: center; gap: 5px;
+            font-family: var(--font); transition: background .15s, color .15s;
+            width: 100%; justify-content: center; margin-top: 4px;
         }
-        #drawer-fab:hover { opacity: .85; }
+        #drawer-fab:hover { background: rgba(255,255,255,.15); color: #fff; }
+        #drawer-fab.fab-open { background: rgba(37,99,235,.35); color: #fff; border-color: rgba(37,99,235,.6); }
     </style>
 </head>
 <body>
@@ -403,6 +416,24 @@
                     <span>ARPEGE</span><span class="model-res-tag">11km</span>
                     <span class="grib-missing-label">No GRIB</span><span class="grib-dot" id="dot-meteofrance_arpege_europe"></span>
                 </button>
+                <!-- API-only wind model (hidden in GRIB mode) -->
+                <button class="model-pill" id="pill-gfs_global" onclick="switchActiveForecastModel('gfs_global')" onmouseenter="hoverPrewarm('gfs_global')">
+                    <span>GFS</span><span class="model-res-tag">22km</span>
+                    <span class="grib-dot" id="dot-gfs_global"></span>
+                </button>
+                <!-- GRIB-only wave models (hidden in API mode) -->
+                <button class="model-pill" id="pill-mfwam_arome" onclick="switchActiveForecastModel('mfwam_arome')" onmouseenter="hoverPrewarm('mfwam_arome')" style="display:none">
+                    <span>Wave AROME</span><span class="model-res-tag">0.025°</span>
+                    <span class="grib-missing-label">No GRIB</span><span class="grib-dot" id="dot-mfwam_arome"></span>
+                </button>
+                <button class="model-pill" id="pill-mfwam_ecmwf" onclick="switchActiveForecastModel('mfwam_ecmwf')" onmouseenter="hoverPrewarm('mfwam_ecmwf')" style="display:none">
+                    <span>Wave ECMWF</span><span class="model-res-tag">0.2°</span>
+                    <span class="grib-missing-label">No GRIB</span><span class="grib-dot" id="dot-mfwam_ecmwf"></span>
+                </button>
+                <!-- Compare models toggle — separate from map model picker -->
+                <button id="drawer-fab" onclick="toggleDrawer()">
+                    <span id="drawer-fab-icon">▲</span> Compare Models
+                </button>
             </div>
 
             <!-- Pin popup (Windy-style) -->
@@ -416,10 +447,6 @@
                 </div>
             </div>
 
-            <!-- FAB to open/close drawer -->
-            <button id="drawer-fab" onclick="toggleDrawer()">
-                <span id="drawer-fab-icon">▲</span> Compare Models
-            </button>
         </div>
 
         <!-- ── Comparison drawer ── -->
@@ -428,7 +455,6 @@
                 <span class="tb-label">Hours</span>
                 <div class="tb-hours">
                     <button class="tb-hr-btn active" id="tbl-hr-full" onclick="setHoursMode('full')">Full</button>
-                    <button class="tb-hr-btn"        id="tbl-hr-24"   onclick="setHoursMode('24hr')">24 HR</button>
                     <button class="tb-hr-btn"        id="tbl-hr-race" onclick="setHoursMode('race')">Race</button>
                 </div>
 
@@ -462,7 +488,7 @@
             </div>
         </div>
 
-        <!-- ── Wind speed scale ── -->
+        <!-- ── Wind/Wave speed scale ── -->
         <div id="wind-scale">
             <div id="wind-scale-bar"></div>
             <div id="wind-scale-labels">
@@ -490,8 +516,28 @@
         "meteofrance_arome_france_hd": "AROME 1.5km Micro-Coastal Mesh",
         "lamma_1k": "LaMMA 1km High-Fidelity Regional Mesh",
         "icon_eu": "ICON 7km High-Resolution European Horizon",
-        "meteofrance_arpege_europe": "ARPEGE 11km Regional Forecast Horizon"
+        "meteofrance_arpege_europe": "ARPEGE 11km Regional Forecast Horizon",
+        "gfs_global": "GFS 22km Global Forecast System",
+        "mfwam_arome": "MFWAM Arome 0.025° Wave Model",
+        "mfwam_ecmwf": "MFWAM ECMWF 0.2° Wave Model",
     };
+
+    // Wave-height colour scale (0–6 m)
+    const WAVE_COLOR_SCALE = [
+        { m: 0,   color: [10,20,60,0]    },
+        { m: 0.3, color: [10,50,140,255] },
+        { m: 0.8, color: [20,120,200,255]},
+        { m: 1.5, color: [0,180,200,255] },
+        { m: 2.5, color: [0,200,130,255] },
+        { m: 3.5, color: [200,200,0,255] },
+        { m: 5.0, color: [220,80,0,255]  },
+        { m: 7.0, color: [180,0,60,255]  },
+    ];
+    // Wave height colour stops for table cells (Hs in metres)
+    const WAVE_STOPS = [
+        [0,"#f0f8ff"],[0.3,"#b0d4f0"],[0.8,"#50a8e0"],[1.5,"#00c8c8"],
+        [2.5,"#00c882"],[3.5,"#c8c800"],[5.0,"#e05000"],[7.0,"#b00040"],
+    ];
 
     const WIND_STOPS = [
         [0,"#ffffff"],[5,"#ffffff"],[5.5,"#e8f7ff"],[6,"#cceeff"],
@@ -509,20 +555,31 @@
 
     const TABLE_OM_MODELS = [
         { id: "ecmwf_ifs",                   label: "ECMWF",    res: "9km"   },
-        { id: "icon_eu",                      label: "ICON-EU",  res: "7km"   },
-        { id: "meteofrance_arpege_europe",    label: "ARPEGE",   res: "11km"  },
-        { id: "meteofrance_arome_france_hd",  label: "AROME HD", res: "1.5km" },
+        { id: "gfs_global",                  label: "GFS",      res: "22km"  },
+        { id: "icon_eu",                     label: "ICON-EU",  res: "7km"   },
+        { id: "meteofrance_arpege_europe",   label: "ARPEGE",   res: "11km"  },
+        { id: "meteofrance_arome_france_hd", label: "AROME HD", res: "1.5km" },
+    ];
+    const TABLE_OM_WAVE_MODELS = [
+        { id: "ecmwf_wam",    label: "ECMWF WAM", res: "9km"  },
+        // { id: "ncep_gfswave", label: "GFS Wave",  res: "25km" },  // not returning data via OM Marine API
+        // { id: "dwd_ewam",     label: "DWD EWAM",  res: "5km"  },  // not returning data via OM Marine API
+        // { id: "mfwam",        label: "MF WAM",    res: "8km"  },  // not returning data via OM Marine API
     ];
     const TABLE_GRIB_MODELS = [
         { id: "ecmwf_ifs",                   label: "ECMWF",    res: "9km"   },
-        { id: "icon_eu",                      label: "ICON",     res: "7km"   },
-        { id: "meteofrance_arpege_europe",    label: "ARPEGE",   res: "11km"  },
-        { id: "meteofrance_arome_france_hd",  label: "AROME HD", res: "1.5km" },
-        { id: "lamma_1k",                     label: "LaMMA",    res: "1km"   },
+        { id: "icon_eu",                     label: "ICON",     res: "7km"   },
+        { id: "meteofrance_arpege_europe",   label: "ARPEGE",   res: "11km"  },
+        { id: "meteofrance_arome_france_hd", label: "AROME HD", res: "1.5km" },
+        { id: "lamma_1k",                    label: "LaMMA",    res: "1km"   },
+        { id: "mfwam_arome",                 label: "Wave AROME", res: "0.025°"},
+        { id: "mfwam_ecmwf",                 label: "Wave ECMWF", res: "0.2°" },
     ];
 
-    const ALL_MAP_MODEL_IDS = ['ecmwf_ifs','meteofrance_arome_france_hd','lamma_1k','icon_eu','meteofrance_arpege_europe'];
-    const GRIB_ONLY_MODELS  = ['lamma_1k'];
+    const ALL_MAP_MODEL_IDS = ['ecmwf_ifs','meteofrance_arome_france_hd','lamma_1k','icon_eu','meteofrance_arpege_europe','gfs_global','mfwam_arome','mfwam_ecmwf'];
+    const GRIB_ONLY_MODELS  = ['lamma_1k','mfwam_arome','mfwam_ecmwf'];
+    const API_ONLY_MODELS   = ['gfs_global'];
+    const WAVE_MODELS       = new Set(['mfwam_arome','mfwam_ecmwf']);
 
     // ═══════════════════════════════════════════════════════════
     // MAP STATE
@@ -561,6 +618,22 @@
     ];
 
     function getWindColorContinuous(speed) {
+        if (WAVE_MODELS.has(activeModelId)) {
+            // speed here is SWH in m/s equivalent — but for waves u/v encodes swh directly as m
+            const swh = speed; // swh in metres
+            const sc = WAVE_COLOR_SCALE;
+            if (swh <= sc[0].m) return sc[0].color;
+            if (swh >= sc[sc.length-1].m) return sc[sc.length-1].color;
+            for (let i = 0; i < sc.length-1; i++) {
+                const lo=sc[i], hi=sc[i+1];
+                if (swh >= lo.m && swh <= hi.m) {
+                    const t=(swh-lo.m)/(hi.m-lo.m);
+                    return [lo.color[0]+t*(hi.color[0]-lo.color[0]),lo.color[1]+t*(hi.color[1]-lo.color[1]),
+                            lo.color[2]+t*(hi.color[2]-lo.color[2]),lo.color[3]+t*(hi.color[3]-lo.color[3])];
+                }
+            }
+            return [0,0,0,0];
+        }
         const knots = speed * 1.94384;
         if (knots <= colorScale[0].knots) return colorScale[0].color;
         if (knots >= colorScale[colorScale.length-1].knots) return colorScale[colorScale.length-1].color;
@@ -781,13 +854,46 @@
     }
 
     // ═══════════════════════════════════════════════════════════
+    // SCALE BAR  (adapts between wind and wave modes)
+    // ═══════════════════════════════════════════════════════════
+    function syncScaleBar(){
+        const isWave = WAVE_MODELS.has(activeModelId);
+        const bar  = document.getElementById('wind-scale-bar');
+        const lbls = document.getElementById('wind-scale-labels');
+        if(isWave){
+            bar.style.background='linear-gradient(to right,#0a143c,#0a3296,#1478c8,#00c8c8,#00c882,#c8c800,#e05000,#b00040)';
+            lbls.innerHTML='<span>0</span><span>0.5</span><span>1</span><span>1.5</span><span>2</span><span>2.5</span><span>3</span><span>4</span><span>5</span><span>7 m</span>';
+        } else {
+            bar.style.background='';  // CSS default
+            lbls.innerHTML='<span>0</span><span>5</span><span>8</span><span>10</span><span>12</span><span>15</span><span>18</span><span>20</span><span>22</span><span>25</span><span>28</span><span>32</span><span>36</span><span>40</span><span>50 kt</span>';
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // MODEL SYNC
     // ═══════════════════════════════════════════════════════════
     async function executeSlicedModelSync(){
-        setModelDot(activeModelId,'loading');
+        const _syncModel  = activeModelId;
+        const _syncSource = activeSourceId;
+        // Only flash dot orange if we don't already have a cached frame for this model
+        const _hasCached  = !!browserSideFrameMatrixCache[`${_syncModel}_${_syncSource}_frame_${currentFrameIdx}`];
+        if(!_hasCached) setModelDot(_syncModel,'loading');
+        const li=document.getElementById('loading-indicator');
+        li.style.display='block'; li.style.color='#fff';
         try {
-            const r=await fetch(`${API_BASE}/api/weather/metadata?model=${activeModelId}&source=${activeSourceId}`);
-            const d=await r.json(); if(d.error) throw new Error(d.error);
+            const r=await fetch(`${API_BASE}/api/weather/metadata?model=${_syncModel}&source=${_syncSource}`);
+            const d=await r.json();
+            if(d.loading){
+                // Still loading in background — show message, schedule retry, do NOT touch dot
+                li.style.color='#f59e0b';
+                li.innerText=_syncSource==='grib'?'GRIB loading… retrying in 12s':'API loading…';
+                // Retry only if user hasn't switched to a different model/source
+                setTimeout(()=>{
+                    if(activeModelId===_syncModel && activeSourceId===_syncSource) executeSlicedModelSync();
+                }, 12000);
+                return;
+            }
+            if(d.error) throw new Error(d.error);
             const ph=d.header; timelineTimestamps=d.timestamps;
             const sl=document.getElementById('time-slider');
             sl.max=timelineTimestamps.length-1;
@@ -796,28 +902,55 @@
             metadataHeader=ph;currentActiveFrameData=pf;
             updateTimeDisplay();buildTimeAxis();
             initWeatherCanvas();await renderCurrentFrameToCanvas();mountOrUpdateWeatherLayer();
-            document.getElementById('loading-indicator').style.display='none';
-            setModelDot(activeModelId,'loaded');
-            triggerBackgroundCacheWarmup().then(()=>warmupAllLoadedModels());
+            // Guard: if user switched away while we were loading, don't overwrite their state
+            if(activeModelId!==_syncModel || activeSourceId!==_syncSource) return;
+            li.style.display='none';
+            setModelDot(_syncModel,'loaded');
+            syncScaleBar();
+            triggerBackgroundCacheWarmup();
         } catch(e){
-            document.getElementById('loading-indicator').style.color='#ff3333';
-            document.getElementById('loading-indicator').innerText='Sync Mismatch Error';
-            setModelDot(activeModelId,'error');
+            if(activeModelId===_syncModel && activeSourceId===_syncSource){
+                li.style.color='#ff3333';
+                li.innerText='No data — try another model';
+                setModelDot(_syncModel,'error');
+            }
         }
+    }
+
+    // Decode a binary frame response into {uData, vData, gustData} 2-D arrays
+    async function _fetchFrameBinary(model, source, idx){
+        const r = await fetch(`${API_BASE}/api/weather/frame.bin?model=${model}&source=${source}&frame=${idx}`);
+        if(!r.ok) throw new Error(`HTTP ${r.status}`);
+        const buf  = await r.arrayBuffer();
+        const i32  = new Int32Array(buf, 0, 2);
+        const ny   = i32[0], nx = i32[1];
+        const n    = ny * nx;
+        const base = 8; // 2 × int32 = 8 bytes
+        const uFlat = new Float32Array(buf, base,           n);
+        const vFlat = new Float32Array(buf, base + n*4,     n);
+        const gFlat = new Float32Array(buf, base + n*4*2,   n);
+        // Reshape flat arrays into 2-D arrays (rows = lat, cols = lon)
+        const uData=[], vData=[], gustData=[];
+        for(let r2=0;r2<ny;r2++){
+            uData.push(Array.from(uFlat.subarray(r2*nx,(r2+1)*nx)));
+            vData.push(Array.from(vFlat.subarray(r2*nx,(r2+1)*nx)));
+            gustData.push(Array.from(gFlat.subarray(r2*nx,(r2+1)*nx)));
+        }
+        return {uData, vData, gustData};
     }
 
     async function streamIsolatedFramePending(idx){
         const k=`${activeModelId}_${activeSourceId}_frame_${idx}`;
         if(browserSideFrameMatrixCache[k]) return browserSideFrameMatrixCache[k];
-        const r=await fetch(`${API_BASE}/api/weather/frame?model=${activeModelId}&source=${activeSourceId}&frame=${idx}`);
-        const d=await r.json();browserSideFrameMatrixCache[k]=d;return d;
+        const d=await _fetchFrameBinary(activeModelId,activeSourceId,idx);
+        browserSideFrameMatrixCache[k]=d; return d;
     }
     async function streamIsolatedFrame(idx){
         updateTimeDisplay();
         const k=`${activeModelId}_${activeSourceId}_frame_${idx}`;
         if(browserSideFrameMatrixCache[k]){currentActiveFrameData=browserSideFrameMatrixCache[k];return;}
-        const r=await fetch(`${API_BASE}/api/weather/frame?model=${activeModelId}&source=${activeSourceId}&frame=${idx}`);
-        const d=await r.json();browserSideFrameMatrixCache[k]=d;currentActiveFrameData=d;
+        const d=await _fetchFrameBinary(activeModelId,activeSourceId,idx);
+        browserSideFrameMatrixCache[k]=d; currentActiveFrameData=d;
     }
     async function triggerBackgroundCacheWarmup(){
         const m=activeModelId,s=activeSourceId;
@@ -825,36 +958,15 @@
             if(m!==activeModelId||s!==activeSourceId) break;
             const k=`${m}_${s}_frame_${f}`;
             if(!browserSideFrameMatrixCache[k]){
-                try{const r=await fetch(`${API_BASE}/api/weather/frame?model=${m}&source=${s}&frame=${f}`);
-                    const d=await r.json();browserSideFrameMatrixCache[k]=d;await new Promise(res=>setTimeout(res,40));}catch(e){}
+                try{const d=await _fetchFrameBinary(m,s,f);
+                    browserSideFrameMatrixCache[k]=d;await new Promise(res=>setTimeout(res,40));}catch(e){}
             }
         }
     }
 
-    async function warmupAllLoadedModels(){
-        // After the active model is warmed up, silently pre-warm all other loaded models
-        // so switching between them feels instant
-        for(const modelId of ALL_MAP_MODEL_IDS){
-            if(modelId===activeModelId) continue;
-            const src=activeSourceId;
-            try{
-                const r=await fetch(`${API_BASE}/api/weather/metadata?model=${modelId}&source=${src}`);
-                const d=await r.json();
-                if(d.error||!d.timestamps) continue;
-                const frames=d.timestamps.length;
-                for(let f=0;f<frames;f++){
-                    const k=`${modelId}_${src}_frame_${f}`;
-                    if(browserSideFrameMatrixCache[k]) continue;
-                    try{
-                        const fr=await fetch(`${API_BASE}/api/weather/frame?model=${modelId}&source=${src}&frame=${f}`);
-                        const fd=await fr.json();
-                        browserSideFrameMatrixCache[k]=fd;
-                        await new Promise(res=>setTimeout(res,40));
-                    }catch(e){}
-                }
-            }catch(e){}
-        }
-    }
+    // warmupAllLoadedModels removed — pre-fetching all frames for all models
+    // caused ~40s of unnecessary network traffic on every load. Models are now
+    // cached on-demand when first accessed via hoverPrewarm + triggerBackgroundCacheWarmup.
 
     // ═══════════════════════════════════════════════════════════
     // DOT SYSTEM
@@ -876,13 +988,30 @@
     function isRendered(modelId){return clientRenderedModels.has(`${modelId}_${activeSourceId}`);}
     function initAllDotsRed(){ALL_MAP_MODEL_IDS.forEach(id=>{const p=document.getElementById(`pill-${id}`);if(p&&p.style.display!=='none') applyDot(id,'error');});}
     async function refreshAllDots(){
-        if(activeSourceId==='grib'){
-            try{const r=await fetch(`${API_BASE}/api/weather/grib-status`);const s=await r.json();
-                for(const[id,info] of Object.entries(s)){if(info.status==='missing') applyDot(id,'missing');else if(isRendered(id)) applyDot(id,'loaded');else applyDot(id,'error');}
-            }catch(e){}
-        } else {
-            ALL_MAP_MODEL_IDS.forEach(id=>{const p=document.getElementById(`pill-${id}`);if(!p||p.style.display==='none') return;applyDot(id,isRendered(id)?'loaded':'error');});
-        }
+        try{
+            // Single endpoint covers both GRIB and API models
+            const r=await fetch(`${API_BASE}/api/models/loaded`);
+            const {loaded}=await r.json();
+            const loadedSet=new Set(loaded);
+
+            if(activeSourceId==='grib'){
+                // Also fetch GRIB-specific status for 'missing' vs 'loading' distinction
+                try{const gr=await fetch(`${API_BASE}/api/weather/grib-status`);const s=await gr.json();
+                    for(const[id,info] of Object.entries(s)){
+                        if(info.status==='missing') applyDot(id,'missing');
+                        else if(info.loaded||loadedSet.has(`${id}_grib`)) applyDot(id,'loaded');
+                        else applyDot(id,'loading');
+                    }
+                }catch(e){}
+            } else {
+                // API source: green if server has it loaded OR browser already rendered it
+                ALL_MAP_MODEL_IDS.forEach(id=>{
+                    const p=document.getElementById(`pill-${id}`);if(!p||p.style.display==='none') return;
+                    if(loadedSet.has(`${id}_api`)||isRendered(id)) applyDot(id,'loaded');
+                    else applyDot(id,'loading'); // orange while server still fetching
+                });
+            }
+        }catch(e){}
     }
 
     function applySourceVisibility(){
@@ -891,6 +1020,11 @@
             const p=document.getElementById(`pill-${id}`);if(!p) return;
             p.style.display=isGrib?'':'none';
             if(!isGrib&&activeModelId===id){document.getElementById('pill-ecmwf_ifs').classList.add('active');p.classList.remove('active');activeModelId='ecmwf_ifs';}
+        });
+        API_ONLY_MODELS.forEach(id=>{
+            const p=document.getElementById(`pill-${id}`);if(!p) return;
+            p.style.display=isGrib?'none':'';
+            if(isGrib&&activeModelId===id){document.getElementById('pill-ecmwf_ifs').classList.add('active');p.classList.remove('active');activeModelId='ecmwf_ifs';}
         });
     }
 
@@ -911,12 +1045,11 @@
     }
 
     function hoverPrewarm(modelId){
-        // Start fetching the first frame of a model on hover so click feels instant
         if(modelId===activeModelId) return;
         const k=`${modelId}_${activeSourceId}_frame_${currentFrameIdx}`;
         if(browserSideFrameMatrixCache[k]) return;
-        fetch(`${API_BASE}/api/weather/frame?model=${modelId}&source=${activeSourceId}&frame=${currentFrameIdx}`)
-            .then(r=>r.json()).then(d=>{browserSideFrameMatrixCache[k]=d;}).catch(()=>{});
+        _fetchFrameBinary(modelId,activeSourceId,currentFrameIdx)
+            .then(d=>{browserSideFrameMatrixCache[k]=d;}).catch(()=>{});
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -940,23 +1073,27 @@
     function updatePinPopup(){
         const popup=document.getElementById('pin-popup');
         if(!popup) return;
-        // Get pixel position of pin on screen
         const pt=map.project([pinLon,pinLat]);
         popup.style.left=pt.x+'px';
         popup.style.top=pt.y+'px';
 
-        // Wind data from interpolated frame
         const w=getInterpolatedWind(pinLon,pinLat);
-        const kts=(w.speed*1.94384);
-        document.getElementById('pp-speed').textContent=isFinite(kts)&&kts>0.1?Math.round(kts):'–';
+        const isWave=WAVE_MODELS.has(activeModelId);
+
+        document.querySelector('#pin-popup .pp-label').textContent=isWave?'Wave Ht':'Wind';
+        const unitEl=popup.querySelector('.pp-unit');
+        if(unitEl) unitEl.textContent=isWave?'m':'kt';
+
+        const val=isWave ? (isFinite(w.speed)&&w.speed>0.01?w.speed.toFixed(1):'–')
+                         : (w.speed*1.94384>0.1?Math.round(w.speed*1.94384):'–');
+        document.getElementById('pp-speed').textContent=val;
 
         if(w.u!==0||w.v!==0){
-            // twd = direction wind is blowing FROM (meteorological)
-            const twd=(Math.atan2(-w.u,-w.v)*180/Math.PI+360)%360;
+            const dir=(Math.atan2(-w.u,-w.v)*180/Math.PI+360)%360;
             const arrow=document.getElementById('pp-arrow');
             arrow.style.display='inline-block';
-            arrow.style.transform=`rotate(${(twd+180)%360}deg)`;
-            document.getElementById('pp-dir').textContent=Math.round(twd)+'°';
+            arrow.style.transform=`rotate(${(dir+180)%360}deg)`;
+            document.getElementById('pp-dir').textContent=Math.round(dir)+'°';
         } else {
             document.getElementById('pp-arrow').style.display='none';
             document.getElementById('pp-dir').textContent='';
@@ -975,12 +1112,12 @@
         });
         pinMarker.on('dragend',()=>{
             const ll=pinMarker.getLngLat();pinLat=ll.lat;pinLon=ll.lng;
-            savePinLocation();updatePinCoords();updatePinPopup();scheduleTableRefresh(0);
+            savePinLocation();updatePinCoords();updatePinPopup();scheduleTableRefresh(500);
         });
         map.on('click',e=>{
             pinLat=e.lngLat.lat;pinLon=e.lngLat.lng;
             pinMarker.setLngLat([pinLon,pinLat]);
-            savePinLocation();updatePinCoords();updatePinPopup();scheduleTableRefresh(0);
+            savePinLocation();updatePinCoords();updatePinPopup();scheduleTableRefresh(500);
         });
         // Keep popup position synced when map pans/zooms
         map.on('move',()=>{ if(document.getElementById('pin-popup').style.display==='block') updatePinPopup(); });
@@ -989,7 +1126,7 @@
     // ═══════════════════════════════════════════════════════════
     // COMPARISON TABLE STATE
     // ═══════════════════════════════════════════════════════════
-    let tableSource = 'om';
+    let tableSource = 'api';   // mirrors activeSourceId default ('api')
     let tableMetric = 'wind';
     let tableHoursMode = 'full';
     let tableData = {};
@@ -998,8 +1135,8 @@
     let drawerOpen = false;
 
     function syncTableSource(){
-        // Table source mirrors the map: Cloud API → OM, Local GRIB → grib
-        tableSource = activeSourceId === 'grib' ? 'grib' : 'om';
+        // Table source mirrors the map exactly: 'api' or 'grib'
+        tableSource = activeSourceId;
         rebuildModelPanel();
         scheduleTableRefresh(0);
     }
@@ -1015,7 +1152,9 @@
         tableMetric=m;
         document.getElementById('tbl-metric-wind').classList.toggle('active',m==='wind');
         document.getElementById('tbl-metric-cape').classList.toggle('active',m==='cape');
-        renderTable();
+        // CAPE data isn't in the local grid cache — refetch from OM point API when switching to CAPE
+        if(m==='cape' && tableSource!=='grib') fetchTableData();
+        else renderTable();
     }
 
     function scheduleTableRefresh(delay=300){
@@ -1028,40 +1167,102 @@
         document.getElementById('tbl-status').textContent='Fetching…';
         try {
             const models=[...selectedTableModels];
-            if(tableSource==='om'){
-                // Direct point forecast from Open-Meteo — fast single-point call, 5 days
-                const resp=await fetch(`${API_BASE}/api/weather/om`,{
-                    method:'POST',headers:{'Content-Type':'application/json'},
-                    body:JSON.stringify({lat:pinLat,lon:pinLon,models})
-                });
-                const data=await resp.json();
-                tableData={};
-                for(const[id,res] of Object.entries(data)){
-                    if(res.error||!res.data||!res.data.length) continue;
-                    const info=TABLE_OM_MODELS.find(m=>m.id===id);
-                    tableData[id]={label:info?.label||id,res:info?.res||'',source:'OM',
-                        timestamps:res.data.map(d=>d.timestamp),tws:res.data.map(d=>d.tws),
-                        twd:res.data.map(d=>d.twd),gust:res.data.map(d=>d.gust),cape:res.data.map(d=>d.cape)};
-                }
-            } else {
-                tableData={};
+            const src = tableSource; // 'api' or 'grib'
+            const isGrib = src==='grib';
+            tableData={};
+            const fetchedAt = new Date();
+
+            if(isGrib){
+                // GRIB mode: all models from local GRIB cache
+                let anyGribLoading = false;
                 await Promise.all(models.map(async id=>{
                     try{
                         const r=await fetch(`${API_BASE}/api/weather/point?lat=${pinLat}&lon=${pinLon}&model=${id}&source=grib`);
-                        const res=await r.json();if(res.error||!res.data||!res.data.length) return;
+                        if(r.status===503){ anyGribLoading=true; return; }
+                        const res=await r.json();
+                        if(res.error||!res.data||!res.data.length) return;
                         const info=TABLE_GRIB_MODELS.find(m=>m.id===id);
-                        tableData[id]={label:info?.label||id,res:info?.res||'',source:'GRIB',
+                        tableData[id]={label:info?.label||id,res:info?.res||'',source:'GRIB',fetchedAt,
+                            model_type:res.model_type||'wind',run_time:res.run_time||null,
                             timestamps:res.data.map(d=>d.timestamp),tws:res.data.map(d=>d.tws),
                             twd:res.data.map(d=>d.twd),gust:res.data.map(d=>d.gust),cape:res.data.map(d=>d.cape)};
-                    }catch(e){}
+                    }catch(e){ console.warn(`GRIB point fetch failed for ${id}:`, e); }
                 }));
+                if(anyGribLoading) scheduleTableRefresh(8000);
+            } else {
+                // API mode:
+                // • Wind models  → local in-memory grid cache (/api/weather/point?source=api) — instant
+                // • Wave models  → OM Marine API (/api/marine/om) — external but wave grids not cached locally
+                const waveIds = models.filter(id=>TABLE_OM_WAVE_MODELS.some(m=>m.id===id));
+                const windIds = models.filter(id=>!waveIds.includes(id));
+
+                if(tableMetric==='cape'){
+                    // CAPE isn't in the local grid cache — use OM point API for CAPE metric
+                    try{
+                        const resp=await fetch(`${API_BASE}/api/weather/om`,{
+                            method:'POST',headers:{'Content-Type':'application/json'},
+                            body:JSON.stringify({lat:pinLat,lon:pinLon,models:windIds})
+                        });
+                        if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                        const data=await resp.json();
+                        for(const[id,res] of Object.entries(data)){
+                            if(res.error||!res.data||!res.data.length) continue;
+                            const info=TABLE_OM_MODELS.find(m=>m.id===id);
+                            tableData[id]={label:info?.label||id,res:info?.res||'',source:'API',fetchedAt,
+                                model_type:'wind',run_time:res.run_time||null,
+                                timestamps:res.data.map(d=>d.timestamp),tws:res.data.map(d=>d.tws),
+                                twd:res.data.map(d=>d.twd),gust:res.data.map(d=>d.gust),cape:res.data.map(d=>d.cape)};
+                        }
+                    }catch(e){ console.warn('OM CAPE fetch failed:', e); }
+                } else {
+                    // Wind mode: local in-memory grid cache (instant, no external call)
+                    let anyStillLoading = false;
+                    await Promise.all(windIds.map(async id=>{
+                        try{
+                            const r=await fetch(`${API_BASE}/api/weather/point?lat=${pinLat}&lon=${pinLon}&model=${id}&source=api`);
+                            if(r.status===503){ anyStillLoading=true; return; } // model not ready yet
+                            const res=await r.json();
+                            if(res.error||!res.data||!res.data.length) return;
+                            const info=TABLE_OM_MODELS.find(m=>m.id===id);
+                            tableData[id]={label:info?.label||id,res:info?.res||'',source:'API',fetchedAt,
+                                model_type:'wind',run_time:res.run_time||null,
+                                timestamps:res.data.map(d=>d.timestamp),tws:res.data.map(d=>d.tws),
+                                twd:res.data.map(d=>d.twd),gust:res.data.map(d=>d.gust),cape:res.data.map(d=>d.cape)};
+                        }catch(e){ console.warn(`API point fetch failed for ${id}:`, e); }
+                    }));
+                    // Some models were still loading — retry in 8s to pick them up once ready
+                    if(anyStillLoading) scheduleTableRefresh(8000);
+                }
+
+                // Waves: external Marine API
+                if(waveIds.length){
+                    try{
+                        const resp=await fetch(`${API_BASE}/api/marine/om`,{
+                            method:'POST',headers:{'Content-Type':'application/json'},
+                            body:JSON.stringify({lat:pinLat,lon:pinLon,models:waveIds})
+                        });
+                        if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                        const data=await resp.json();
+                        for(const[id,res] of Object.entries(data)){
+                            if(res.error||!res.data||!res.data.length) continue;
+                            const info=TABLE_OM_WAVE_MODELS.find(m=>m.id===id);
+                            tableData[id]={label:info?.label||id,res:info?.res||'',source:'OM',fetchedAt,
+                                model_type:'wave',run_time:res.run_time||null,
+                                timestamps:res.data.map(d=>d.timestamp),tws:res.data.map(d=>d.tws),
+                                twd:res.data.map(d=>d.twd),gust:res.data.map(d=>d.gust),cape:res.data.map(d=>d.cape)};
+                        }
+                    }catch(e){ console.warn('Marine wave fetch failed:', e); }
+                }
             }
+
             renderTable();
-            updateTableHighlight(true); // scroll to current slider position after fetch
-            const srcLabel = tableSource==='grib' ? 'Local GRIB' : 'Cloud API';
-            document.getElementById('tbl-status').textContent=`${srcLabel} • ${Object.keys(tableData).length} models • ${pinLat.toFixed(3)}°, ${pinLon.toFixed(3)}°`;
+            updateTableHighlight(true);
+            const srcLabel = isGrib ? 'Local GRIB' : 'Cloud API';
+            const displayed = Object.keys(tableData).filter(id=>selectedTableModels.has(id)).length;
+            document.getElementById('tbl-status').textContent=`${srcLabel} • ${displayed} models • ${pinLat.toFixed(3)}°, ${pinLon.toFixed(3)}°`;
         } catch(e){
-            document.getElementById('tbl-status').textContent='Fetch failed';
+            console.error('fetchTableData error:', e);
+            document.getElementById('tbl-status').textContent=`Fetch failed: ${e.message||e}`;
         }
     }
 
@@ -1210,7 +1411,8 @@
     function renderTable(){
         const wrap=document.getElementById('wx-table-wrap');
         const cols=getTableColumns();
-        const ids=Object.keys(tableData);
+        // Only render models that are currently selected (supports instant deselect/resize)
+        const ids=Object.keys(tableData).filter(id=>selectedTableModels.has(id));
         if(!ids.length){
             wrap.innerHTML='<div class="wx-empty-state">Place a pin on the map then click <strong>Fetch Data</strong></div>';return;
         }
@@ -1237,14 +1439,22 @@
         ids.forEach(id=>{
             const d=tableData[id],tr=tbody.insertRow();
             const ltd=document.createElement('td');ltd.className='wx-model-cell';
-            const runTs=d.timestamps?.[0];
-            let runStr='';
-            if(runTs){
-                const rd=new Date(runTs.endsWith('Z')?runTs:runTs+'Z');
-                runStr=rd.toLocaleString('en-US',{timeZone:'Europe/Rome',weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});
+            // Line 2: run time + fetched time
+            let line2Parts = [];
+            if(d.run_time){
+                // run_time is ISO "2026-06-12T06:00" — extract HH:MM in CEST
+                try {
+                    const rt = new Date(d.run_time.endsWith('Z')?d.run_time:d.run_time+'Z');
+                    const hhmm = rt.toLocaleString('sv',{timeZone:'Europe/Rome'}).split(' ')[1].slice(0,5);
+                    line2Parts.push(`run ${hhmm}`);
+                } catch(e){}
             }
-            const runHtml = runStr ? `<div class="wx-model-run">from ${runStr}</div>` : '';
-            ltd.innerHTML=`<div class="wx-model-name">${d.label}</div><div class="wx-model-sub">${d.source} ${d.res}</div>${runHtml}`;
+            if(d.fetchedAt){
+                const hhmm = d.fetchedAt.toLocaleString('sv',{timeZone:'Europe/Rome'}).split(' ')[1].slice(0,5);
+                line2Parts.push(`fetched ${hhmm}`);
+            }
+            const line2Html = line2Parts.length ? `<div class="wx-model-run">${line2Parts.join('  ')}</div>` : '';
+            ltd.innerHTML=`<div class="wx-model-name">${d.label} <span class="wx-model-sub">${d.source} · ${d.res}</span></div>${line2Html}`;
             tr.appendChild(ltd);
             cols.forEach(({ts:cts,i:di},ci)=>{
                 const td=document.createElement('td');
@@ -1255,13 +1465,44 @@
                     if(_tableDragOccurred) return;
                     jumpToTableColumn(cts, document.querySelectorAll('#wx-table-wrap thead th')[ci+1]);
                 });
-                if(tableMetric==='wind') renderWindCell(td,d.tws?.[di],d.twd?.[di],d.gust?.[di]);
+                if(d.model_type==='wave') renderWaveCell(td,d.tws?.[di],d.twd?.[di],d.gust?.[di]);
+                else if(tableMetric==='wind') renderWindCell(td,d.tws?.[di],d.twd?.[di],d.gust?.[di]);
                 else renderCapeCell(td,d.cape?.[di]);
                 tr.appendChild(td);
             });
             tbody.appendChild(tr);
         });
         wrap.innerHTML='';wrap.appendChild(tbl);
+
+        // Dynamically size drawer to exactly fit content — no vertical scroll
+        const TOOLBAR_H = 46, THEAD_H = 38, ROW_H = 56, SCROLLBAR_H = 8, PAD = 4;
+        const needed = TOOLBAR_H + THEAD_H + ids.length * ROW_H + SCROLLBAR_H + PAD;
+        document.documentElement.style.setProperty('--drawer-h', needed + 'px');
+    }
+
+    function waveColor(hs) {
+        if (hs == null) return "#f8fafc";
+        for (let i = 1; i < WAVE_STOPS.length; i++) {
+            const [s0,c0]=WAVE_STOPS[i-1],[s1,c1]=WAVE_STOPS[i];
+            if (hs <= s1) return lerpHex(c0,c1,(hs-s0)/(s1-s0));
+        }
+        return WAVE_STOPS[WAVE_STOPS.length-1][1];
+    }
+
+    function renderWaveCell(td, hs, dir, period) {
+        const bg = waveColor(hs), fg = contrastColor(bg);
+        td.style.background = bg;
+        const cell = document.createElement('div'); cell.className = 'wx-cell'; cell.style.color = fg;
+        if (hs == null) {
+            cell.innerHTML = '<span class="wx-null">—</span>';
+        } else {
+            const arrow = dir != null
+                ? `<span class="wx-arrow" style="transform:rotate(${(dir+180)%360}deg);display:inline-block">↑</span>`
+                : '<span class="wx-null">–</span>';
+            const perStr = period != null ? `${period.toFixed(1)}s` : '—';
+            cell.innerHTML = `<div class="wx-tws">${hs.toFixed(1)}</div>${arrow}<div class="wx-gust">${perStr}</div>`;
+        }
+        td.appendChild(cell);
     }
 
     function renderWindCell(td,tws,twd,gust){
@@ -1293,7 +1534,9 @@
         drawerOpen=!drawerOpen;
         const dr=document.getElementById('comparison-drawer');
         dr.classList.toggle('open',drawerOpen);
+        const fab=document.getElementById('drawer-fab');
         document.getElementById('drawer-fab-icon').textContent=drawerOpen?'▼':'▲';
+        fab.classList.toggle('fab-open',drawerOpen);
         setTimeout(()=>{resizeParticleCanvas();map.resize();},320);
         if(drawerOpen&&!Object.keys(tableData).length) fetchTableData();
     }
@@ -1303,22 +1546,53 @@
     // ═══════════════════════════════════════════════════════════
     function rebuildModelPanel(){
         const panel=document.getElementById('tbl-models-panel');
-        const models=tableSource==='om'?TABLE_OM_MODELS:TABLE_GRIB_MODELS;
+        const isGrib = tableSource==='grib';
+        const models = isGrib ? TABLE_GRIB_MODELS : TABLE_OM_MODELS;
         panel.innerHTML='';
-        models.forEach(({id,label,res})=>{
+
+        // Group: wind models first, then wave models
+        const windModels = models.filter(m=>!WAVE_MODELS.has(m.id));
+        const waveModels = models.filter(m=>WAVE_MODELS.has(m.id));
+
+        function addRow({id,label,res}){
             const row=document.createElement('label');row.className='tbl-model-row';
             const cb=document.createElement('input');cb.type='checkbox';cb.value=id;
             cb.checked=selectedTableModels.has(id);
             cb.addEventListener('change',()=>{
-                if(cb.checked) selectedTableModels.add(id); else selectedTableModels.delete(id);
-                updateModelsBtnLabel();
-                scheduleTableRefresh(200);
+                if(cb.checked){
+                    selectedTableModels.add(id);
+                    updateModelsBtnLabel();
+                    scheduleTableRefresh(300); // fetch data for the newly added model
+                } else {
+                    selectedTableModels.delete(id);
+                    updateModelsBtnLabel();
+                    renderTable();
+                    updateTableHighlight(true);
+                    // Update status count and let map fill the reclaimed space
+                    const srcLabel = tableSource==='grib'?'Local GRIB':'Cloud API';
+                    const displayed = Object.keys(tableData).filter(x=>selectedTableModels.has(x)).length;
+                    document.getElementById('tbl-status').textContent=`${srcLabel} • ${displayed} models • ${pinLat.toFixed(3)}°, ${pinLon.toFixed(3)}°`;
+                    setTimeout(()=>{resizeParticleCanvas();map.resize();},20);
+                }
             });
             const name=document.createElement('span');name.textContent=label;
             const sub=document.createElement('span');sub.className='tbl-model-sub';sub.textContent=res;
             row.appendChild(cb);row.appendChild(name);row.appendChild(sub);
             panel.appendChild(row);
-        });
+        }
+
+        windModels.forEach(addRow);
+
+        if(isGrib && waveModels.length){
+            const sep=document.createElement('div');sep.className='tbl-panel-sep';sep.textContent='── Wave (GRIB) ──';
+            panel.appendChild(sep);
+            waveModels.forEach(addRow);
+        } else if(!isGrib){
+            const sep=document.createElement('div');sep.className='tbl-panel-sep';sep.textContent='── Wave (OM Marine) ──';
+            panel.appendChild(sep);
+            TABLE_OM_WAVE_MODELS.forEach(addRow);
+        }
+
         updateModelsBtnLabel();
     }
     function updateModelsBtnLabel(){document.getElementById('tbl-models-label').textContent=`${selectedTableModels.size} selected`;}
@@ -1329,10 +1603,25 @@
         const open=panel.classList.toggle('open');
         if(open){
             const r=document.getElementById('tbl-models-btn').getBoundingClientRect();
-            panel.style.left=`${r.left}px`;panel.style.top=`${r.bottom+4}px`;
+            // Make temporarily visible at off-screen to measure height
+            panel.style.visibility='hidden'; panel.style.display='flex';
+            const ph=panel.offsetHeight;
+            panel.style.visibility=''; panel.style.display='';
+            const spaceBelow=window.innerHeight - r.bottom - 8;
+            const spaceAbove=r.top - 8;
+            if(spaceBelow >= ph || spaceBelow >= spaceAbove){
+                panel.style.top=`${r.bottom+4}px`;
+            } else {
+                panel.style.top=`${r.top - ph - 4}px`;
+            }
+            panel.style.left=`${Math.min(r.left, window.innerWidth - panel.offsetWidth - 8)}px`;
         }
     }
-    document.addEventListener('click',()=>{document.getElementById('tbl-models-panel').classList.remove('open');});
+    document.addEventListener('click',(e)=>{
+        const panel=document.getElementById('tbl-models-panel');
+        const btn=document.getElementById('tbl-models-btn');
+        if(!panel.contains(e.target)&&!btn.contains(e.target)) panel.classList.remove('open');
+    });
 
     // ═══════════════════════════════════════════════════════════
     // DRAG-TO-SCROLL TABLE
@@ -1399,6 +1688,9 @@
     }
     updateClock();setInterval(updateClock,1000);
 
+    // Auto-refresh all model dots every 10s — turns API and GRIB dots green as server loads them
+    setInterval(refreshAllDots, 10000);
+
     // ═══════════════════════════════════════════════════════════
     // INIT
     // ═══════════════════════════════════════════════════════════
@@ -1428,6 +1720,8 @@
         executeSlicedModelSync().then(()=>{
             initParticlePool();runningParticleLoop();refreshAllDots();
             updatePinPopup();
+            // Auto-populate the comparison table once the map is ready
+            scheduleTableRefresh(1500);
         });
     });
     </script>
