@@ -6,3 +6,4 @@ httpx
 scipy
 cfgrib
 eccodes
+reportlab

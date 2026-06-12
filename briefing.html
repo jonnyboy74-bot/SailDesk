@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SailDesk — Briefing</title>
+    <link rel="icon" href="data:,">
+    <style>
+        :root {
+            --navy:   #1B3A5C;
+            --accent: #2563EB;
+            --font:   system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+            --header: 48px;
+            --bg:     #f8fafc;
+            --surface:#ffffff;
+            --border: #e2e8f0;
+            --muted:  #64748b;
+            --green:  #16a34a;
+            --orange: #ea580c;
+            --red:    #dc2626;
+        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body, html { width: 100%; height: 100%; font-family: var(--font); background: var(--bg); overflow: hidden; }
+
+        /* ── Header ── */
+        .sd-header {
+            display: flex; align-items: center; gap: 1rem;
+            background: var(--navy); padding: 0 1.5rem; height: var(--header);
+            flex-shrink: 0; z-index: 100; position: relative;
+        }
+        .sd-logo { font-size: 1.1rem; font-weight: 800; color: #fff; letter-spacing: -.03em; }
+        .sd-logo span { color: #60A5FA; }
+        .sd-tab-bar { display: flex; gap: .25rem; }
+        .sd-tab {
+            border: none; background: none; color: rgba(255,255,255,.65);
+            padding: .35rem .9rem; border-radius: 6px; font-size: .8rem;
+            font-weight: 600; cursor: pointer; font-family: var(--font);
+            transition: background .15s, color .15s;
+        }
+        .sd-tab:hover { background: rgba(255,255,255,.1); color: #fff; }
+        .sd-tab.active { background: var(--accent); color: #fff; }
+        .sd-header-time { margin-left: auto; font-size: .7rem; color: rgba(255,255,255,.5); white-space: nowrap; }
+
+        /* ── Layout ── */
+        #app {
+            position: absolute; top: var(--header); left: 0; right: 0; bottom: 0;
+            display: flex; flex-direction: row; overflow: hidden;
+        }
+
+        /* ── Config panel ── */
+        #config-panel {
+            width: 282px; min-width: 260px; flex-shrink: 0;
+            background: var(--surface); border-right: 1px solid var(--border);
+            overflow-y: auto; display: flex; flex-direction: column;
+        }
+        .cfg-section {
+            padding: .85rem 1.1rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .cfg-label {
+            font-size: .63rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: .07em; color: var(--muted); margin-bottom: .5rem;
+        }
+        .cfg-row { display: flex; align-items: center; gap: .4rem; }
+        .cfg-input {
+            border: 1px solid var(--border); border-radius: 6px; padding: .3rem .5rem;
+            font-size: .8rem; font-family: var(--font); color: #1e293b;
+            background: var(--bg); flex: 1; min-width: 0;
+        }
+        .cfg-input:focus { outline: none; border-color: var(--accent); }
+
+        .cfg-toggle {
+            display: inline-flex; background: var(--bg); border: 1px solid var(--border);
+            border-radius: 6px; padding: 2px; gap: 2px;
+        }
+        .cfg-btn {
+            border: none; background: none; padding: .25rem .6rem;
+            border-radius: 4px; font-size: .75rem; font-weight: 600;
+            cursor: pointer; font-family: var(--font); color: var(--muted);
+            transition: background .12s, color .12s; white-space: nowrap;
+        }
+        .cfg-btn.active { background: var(--accent); color: #fff; }
+        .cfg-btn:hover:not(.active) { background: #e2e8f0; color: #1e293b; }
+
+        /* Location */
+        #loc-name  { font-weight: 700; font-size: .85rem; color: #1e293b; }
+        #loc-coords { font-size: .7rem; color: var(--muted); font-family: monospace; margin-top: .15rem; }
+        #loc-no-pin { font-size: .75rem; color: var(--orange); }
+        .hidden { display: none !important; }
+
+        /* Model chips */
+        .model-chips { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .45rem; }
+        .model-chip {
+            border: 1px solid var(--border); border-radius: 4px;
+            padding: .2rem .5rem; font-size: .72rem; font-weight: 600;
+            cursor: pointer; color: var(--muted); background: var(--bg);
+            transition: all .12s; user-select: none;
+        }
+        .model-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .model-chip .chip-res { font-size: .62rem; opacity: .75; margin-left: .2rem; }
+        .chip-sep { width: 100%; font-size: .63rem; color: var(--muted); padding-top: .2rem; }
+
+        /* Generate */
+        .cfg-generate {
+            padding: 1rem 1.1rem .25rem;
+            display: flex; flex-direction: column; gap: .5rem;
+        }
+        #generate-btn {
+            background: var(--accent); color: #fff; border: none;
+            border-radius: 8px; padding: .65rem 1.5rem;
+            font-size: .9rem; font-weight: 700; cursor: pointer; font-family: var(--font);
+            transition: background .15s; text-align: center;
+        }
+        #generate-btn:hover { background: #1D4ED8; }
+        #generate-btn:disabled { background: #93C5FD; cursor: not-allowed; }
+        #br-status {
+            font-size: .72rem; color: var(--muted);
+            min-height: 1rem; line-height: 1.4;
+        }
+        #br-status.loading { color: var(--accent); }
+        #br-status.error   { color: var(--red); }
+        #br-status.ok      { color: var(--green); }
+
+        /* ── PDF panel ── */
+        #pdf-panel {
+            flex: 1; display: flex; flex-direction: column; min-width: 0; background: #525659;
+        }
+        #pdf-empty {
+            flex: 1; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: .75rem; color: #c0cad6;
+        }
+        .pdf-empty-icon { font-size: 3rem; }
+        .pdf-empty-text { font-size: .95rem; font-weight: 600; }
+        .pdf-empty-sub  { font-size: .78rem; color: #94a3b8; }
+        #pdf-toolbar {
+            display: none; align-items: center; justify-content: space-between;
+            padding: .5rem 1rem; background: var(--surface);
+            border-bottom: 1px solid var(--border); flex-shrink: 0;
+        }
+        #pdf-title { font-size: .8rem; font-weight: 600; color: #1e293b; }
+        #push-btn {
+            background: var(--green); color: #fff; border: none;
+            border-radius: 6px; padding: .35rem 1rem; font-size: .75rem;
+            font-weight: 700; cursor: pointer; font-family: var(--font);
+        }
+        #push-btn:hover { background: #15803D; }
+        #push-btn:disabled { background: #86efac; cursor: not-allowed; }
+        #pdf-frame { display: none; flex: 1; width: 100%; border: none; }
+    </style>
+</head>
+<body>
+
+<header class="sd-header">
+    <div style="display:flex;align-items:center;gap:.65rem;">
+        <div class="sd-logo">Sail<span>Desk</span></div>
+        <nav class="sd-tab-bar">
+            <button class="sd-tab" onclick="location.href='/weather'">Weather</button>
+            <button class="sd-tab active">Briefing</button>
+            <button class="sd-tab" data-tab="seabreeze">Sea Breeze</button>
+            <button class="sd-tab" data-tab="tactics">Tactics</button>
+            <button class="sd-tab" data-tab="course">Course</button>
+        </nav>
+    </div>
+    <div class="sd-header-time" id="header-time"></div>
+</header>
+
+<div id="app">
+
+    <!-- ── Left: Config ── -->
+    <div id="config-panel">
+
+        <!-- Location -->
+        <div class="cfg-section">
+            <div class="cfg-label">Location (Weather tab pin)</div>
+            <div id="loc-no-pin" class="hidden">No pin set — place a pin on the Weather tab first</div>
+            <div id="loc-name"></div>
+            <div id="loc-coords"></div>
+        </div>
+
+        <!-- Date & Race Start -->
+        <div class="cfg-section">
+            <div class="cfg-label">Date &amp; Race Start</div>
+            <div class="cfg-row">
+                <input type="date"  id="br-date"      class="cfg-input" />
+                <input type="time"  id="br-race-time" class="cfg-input" value="12:00" style="max-width:86px" />
+            </div>
+        </div>
+
+        <!-- Mode -->
+        <div class="cfg-section">
+            <div class="cfg-label">Briefing Mode</div>
+            <div class="cfg-toggle" id="mode-toggle">
+                <button class="cfg-btn active" data-v="racing"   onclick="setMode(this)">Racing</button>
+                <button class="cfg-btn"        data-v="training" onclick="setMode(this)">Training</button>
+            </div>
+        </div>
+
+        <!-- Event -->
+        <div class="cfg-section">
+            <div class="cfg-label">Event Name</div>
+            <input type="text" id="br-event" class="cfg-input" placeholder="e.g. Regatta — Race 3" />
+        </div>
+
+        <!-- Hours -->
+        <div class="cfg-section">
+            <div class="cfg-label">Hours</div>
+            <div class="cfg-toggle" id="hours-toggle">
+                <button class="cfg-btn active" data-v="race" onclick="setHours(this)">Race 09–18</button>
+                <button class="cfg-btn"        data-v="full" onclick="setHours(this)">Full Run</button>
+            </div>
+        </div>
+
+        <!-- Source + Models -->
+        <div class="cfg-section">
+            <div class="cfg-label">Data Source</div>
+            <div class="cfg-toggle" id="source-toggle" style="margin-bottom:.7rem">
+                <button class="cfg-btn active" data-v="api"  onclick="setSource(this)">Cloud API</button>
+                <button class="cfg-btn"        data-v="grib" onclick="setSource(this)">Local GRIB</button>
+            </div>
+            <div class="cfg-label">Models</div>
+            <div class="model-chips" id="model-chips"></div>
+        </div>
+
+        <!-- Generate -->
+        <div class="cfg-generate">
+            <button id="generate-btn" onclick="generateBriefing()">Generate Briefing</button>
+            <div id="br-status"></div>
+        </div>
+
+    </div><!-- /config-panel -->
+
+    <!-- ── Right: PDF viewer ── -->
+    <div id="pdf-panel">
+        <div id="pdf-empty">
+            <div class="pdf-empty-icon">📋</div>
+            <div class="pdf-empty-text">No briefing generated yet</div>
+            <div class="pdf-empty-sub">Configure settings and click Generate Briefing</div>
+        </div>
+        <div id="pdf-toolbar">
+            <div id="pdf-title">Briefing</div>
+            <button id="push-btn" onclick="pushToDesktop()">⬇ Push to Desktop</button>
+        </div>
+        <iframe id="pdf-frame" title="Race Briefing PDF"></iframe>
+    </div>
+
+</div><!-- /app -->
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════
+const API_BASE = window.location.origin;
+
+const OM_MODELS = [
+    { id: "ecmwf_ifs",                   label: "ECMWF",    res: "9km"   },
+    { id: "gfs_global",                  label: "GFS",      res: "22km"  },
+    { id: "icon_eu",                     label: "ICON-EU",  res: "7km"   },
+    { id: "meteofrance_arpege_europe",   label: "ARPEGE",   res: "11km"  },
+    { id: "meteofrance_arome_france_hd", label: "AROME HD", res: "1.5km" },
+];
+const GRIB_MODELS = [
+    { id: "ecmwf_ifs",                   label: "ECMWF",    res: "9km"   },
+    { id: "icon_eu",                     label: "ICON",     res: "7km"   },
+    { id: "meteofrance_arpege_europe",   label: "ARPEGE",   res: "11km"  },
+    { id: "meteofrance_arome_france_hd", label: "AROME HD", res: "1.5km" },
+    { id: "lamma_1k",                    label: "LaMMA",    res: "1km"   },
+];
+
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+let brMode       = 'racing';
+let brHours      = 'race';
+let brSource     = 'api';
+let brModels     = new Set();
+let brLastFile   = null;
+let pinLat = null, pinLon = null;
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+function init() {
+    // Load pin from Weather tab
+    try {
+        const s = localStorage.getItem('saildesk_pin');
+        if (s) {
+            const o = JSON.parse(s);
+            pinLat = o.lat; pinLon = o.lon;
+            const latStr = `${Math.abs(pinLat).toFixed(4)}${pinLat >= 0 ? 'N' : 'S'}`;
+            const lonStr = `${Math.abs(pinLon).toFixed(4)}${pinLon >= 0 ? 'E' : 'W'}`;
+            document.getElementById('loc-name').textContent   = o.name || 'Race Location';
+            document.getElementById('loc-coords').textContent = `${latStr}  ${lonStr}`;
+        } else {
+            document.getElementById('loc-no-pin').classList.remove('hidden');
+        }
+    } catch(e) {
+        document.getElementById('loc-no-pin').classList.remove('hidden');
+    }
+
+    // Load source from Weather tab
+    try {
+        const s = localStorage.getItem('saildesk_source');
+        if (s === 'grib' || s === 'api') {
+            brSource = s;
+            document.querySelectorAll('#source-toggle .cfg-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.v === brSource);
+            });
+        }
+    } catch(e) {}
+
+    // Load selected models from Weather tab
+    try {
+        const s = localStorage.getItem('saildesk_models');
+        if (s) {
+            const arr = JSON.parse(s);
+            if (Array.isArray(arr)) {
+                // Filter to wind-only models (no waves)
+                const windIds = new Set([...OM_MODELS, ...GRIB_MODELS].map(m => m.id));
+                arr.filter(id => windIds.has(id)).forEach(id => brModels.add(id));
+            }
+        }
+    } catch(e) {}
+
+    // Default: pre-select 3 models if none loaded
+    if (!brModels.size) {
+        brModels = new Set(['ecmwf_ifs', 'icon_eu', 'meteofrance_arome_france_hd']);
+    }
+
+    // Today's date
+    const today = new Date();
+    const y = today.getFullYear(), m = String(today.getMonth()+1).padStart(2,'0'), d = String(today.getDate()).padStart(2,'0');
+    document.getElementById('br-date').value = `${y}-${m}-${d}`;
+
+    buildModelChips();
+    updateClock();
+    setInterval(updateClock, 1000);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MODEL CHIPS
+// ═══════════════════════════════════════════════════════════════
+function buildModelChips() {
+    const models = brSource === 'grib' ? GRIB_MODELS : OM_MODELS;
+    const container = document.getElementById('model-chips');
+    container.innerHTML = '';
+    models.forEach(({ id, label, res }) => {
+        const btn = document.createElement('button');
+        btn.className = 'model-chip' + (brModels.has(id) ? ' active' : '');
+        btn.innerHTML = `${label}<span class="chip-res">${res}</span>`;
+        btn.onclick = () => {
+            if (brModels.has(id)) {
+                if (brModels.size > 1) brModels.delete(id);
+            } else {
+                brModels.add(id);
+            }
+            btn.classList.toggle('active', brModels.has(id));
+        };
+        container.appendChild(btn);
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CONTROLS
+// ═══════════════════════════════════════════════════════════════
+function setMode(btn) {
+    brMode = btn.dataset.v;
+    document.querySelectorAll('#mode-toggle .cfg-btn').forEach(b => b.classList.toggle('active', b === btn));
+    const timeInput = document.getElementById('br-race-time');
+    timeInput.disabled = brMode !== 'racing';
+    timeInput.style.opacity = brMode === 'racing' ? '1' : '0.4';
+}
+
+function setHours(btn) {
+    brHours = btn.dataset.v;
+    document.querySelectorAll('#hours-toggle .cfg-btn').forEach(b => b.classList.toggle('active', b === btn));
+}
+
+function setSource(btn) {
+    brSource = btn.dataset.v;
+    document.querySelectorAll('#source-toggle .cfg-btn').forEach(b => b.classList.toggle('active', b === btn));
+    // Reset models that aren't valid for this source
+    const validIds = new Set((brSource === 'grib' ? GRIB_MODELS : OM_MODELS).map(m => m.id));
+    brModels = new Set([...brModels].filter(id => validIds.has(id)));
+    if (!brModels.size) {
+        const defaults = brSource === 'grib'
+            ? ['ecmwf_ifs', 'icon_eu', 'meteofrance_arome_france_hd']
+            : ['ecmwf_ifs', 'icon_eu', 'meteofrance_arome_france_hd'];
+        defaults.forEach(id => brModels.add(id));
+    }
+    buildModelChips();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GENERATE
+// ═══════════════════════════════════════════════════════════════
+function setStatus(msg, cls = '') {
+    const el = document.getElementById('br-status');
+    el.textContent = msg;
+    el.className = 'br-status' + (cls ? ' ' + cls : '');
+}
+
+async function generateBriefing() {
+    if (pinLat === null || pinLon === null) {
+        setStatus('Place a pin on the Weather tab first', 'error');
+        return;
+    }
+    const date = document.getElementById('br-date').value;
+    if (!date) {
+        setStatus('Select a date', 'error');
+        return;
+    }
+    if (!brModels.size) {
+        setStatus('Select at least one model', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('generate-btn');
+    btn.disabled = true;
+    setStatus('Fetching forecast data and generating PDF…', 'loading');
+
+    // Hide previous PDF
+    document.getElementById('pdf-empty').classList.remove('hidden');
+    document.getElementById('pdf-toolbar').style.display = 'none';
+    document.getElementById('pdf-frame').style.display = 'none';
+
+    const raceTime = document.getElementById('br-race-time').value || '12:00';
+    const eventName = document.getElementById('br-event').value.trim();
+    const locName = document.getElementById('loc-name').textContent || 'Race Location';
+
+    const payload = {
+        location:       { lat: pinLat, lon: pinLon, name: locName },
+        date,
+        briefing_mode:  brMode,
+        race_time_lt:   raceTime,
+        source:         brSource,
+        models:         [...brModels],
+        grib_files:     [],
+        event_name:     eventName,
+        hour_start:     9,
+        hour_end:       18,
+        hours_mode:     brHours,
+    };
+
+    try {
+        const resp = await fetch(`${API_BASE}/api/build_pdf`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        if (!data.ok) throw new Error(data.error || 'PDF generation failed');
+
+        brLastFile = data.file;
+        showPDF(data.file);
+        setStatus('Briefing ready — scroll to review, then push to Desktop', 'ok');
+    } catch (err) {
+        setStatus(`Error: ${err.message}`, 'error');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function showPDF(filename) {
+    const toolbar = document.getElementById('pdf-toolbar');
+    const frame   = document.getElementById('pdf-frame');
+    const empty   = document.getElementById('pdf-empty');
+    const title   = document.getElementById('pdf-title');
+
+    frame.src  = `${API_BASE}/api/download/${encodeURIComponent(filename)}`;
+    title.textContent = filename;
+
+    empty.classList.add('hidden');
+    toolbar.style.display = 'flex';
+    frame.style.display = 'block';
+
+    document.getElementById('push-btn').disabled = false;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PUSH TO DESKTOP
+// ═══════════════════════════════════════════════════════════════
+async function pushToDesktop() {
+    if (!brLastFile) return;
+    const btn = document.getElementById('push-btn');
+    btn.disabled = true;
+    setStatus('Pushing to Desktop…', 'loading');
+    try {
+        const resp = await fetch(`${API_BASE}/api/push_pdf`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ file: brLastFile }),
+        });
+        const data = await resp.json();
+        if (!data.ok) throw new Error(data.error || 'Push failed');
+        setStatus(`Saved to ${data.dest}`, 'ok');
+    } catch (err) {
+        setStatus(`Push failed: ${err.message}`, 'error');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CLOCK
+// ═══════════════════════════════════════════════════════════════
+function updateClock() {
+    const el = document.getElementById('header-time');
+    if (!el) return;
+    const s = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+    }).format(new Date());
+    el.textContent = `${s} CEST`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GO
+// ═══════════════════════════════════════════════════════════════
+init();
+</script>
+</body>
+</html>

@@ -371,7 +371,8 @@
             <div class="sd-logo">Sail<span>Desk</span></div>
             <nav class="sd-tab-bar">
                 <button class="sd-tab active" onclick="location.href='/weather'">Weather</button>
-                <button class="sd-tab"        onclick="location.href='/briefing'">Briefing</button>
+                <button class="sd-tab"        onclick="location.href='/'">Wind Map</button>
+                <button class="sd-tab"        data-tab="briefing">Briefing</button>
                 <button class="sd-tab"        data-tab="seabreeze">Sea Breeze</button>
                 <button class="sd-tab"        data-tab="tactics">Tactics</button>
                 <button class="sd-tab"        data-tab="course">Course</button>
@@ -1125,38 +1126,17 @@
     // ═══════════════════════════════════════════════════════════
     // COMPARISON TABLE STATE
     // ═══════════════════════════════════════════════════════════
+    let tableSource = 'api';   // mirrors activeSourceId default ('api')
     let tableMetric = 'wind';
     let tableHoursMode = 'full';
     let tableData = {};
+    let selectedTableModels = new Set(['ecmwf_ifs','icon_eu','meteofrance_arpege_europe','meteofrance_arome_france_hd']);
     let tableRefreshTimer = null;
     let drawerOpen = false;
-
-    // ── Persistent state (shared with Briefing tab via localStorage) ──
-    function _loadPersistedSource(){
-        try{ const s=localStorage.getItem('saildesk_source'); if(s==='grib'||s==='api') return s; }catch(e){}
-        return 'api';
-    }
-    function _loadPersistedModels(){
-        try{
-            const s=localStorage.getItem('saildesk_models');
-            if(s){ const a=JSON.parse(s); if(Array.isArray(a)&&a.length) return new Set(a); }
-        }catch(e){}
-        return new Set(['ecmwf_ifs','icon_eu','meteofrance_arpege_europe','meteofrance_arome_france_hd']);
-    }
-    let tableSource = _loadPersistedSource();
-    let selectedTableModels = _loadPersistedModels();
-
-    function _persistTableState(){
-        try{
-            localStorage.setItem('saildesk_source', tableSource);
-            localStorage.setItem('saildesk_models', JSON.stringify([...selectedTableModels]));
-        }catch(e){}
-    }
 
     function syncTableSource(){
         // Table source mirrors the map exactly: 'api' or 'grib'
         tableSource = activeSourceId;
-        _persistTableState();
         rebuildModelPanel();
         scheduleTableRefresh(0);
     }
@@ -1581,12 +1561,10 @@
             cb.addEventListener('change',()=>{
                 if(cb.checked){
                     selectedTableModels.add(id);
-                    _persistTableState();
                     updateModelsBtnLabel();
                     scheduleTableRefresh(300); // fetch data for the newly added model
                 } else {
                     selectedTableModels.delete(id);
-                    _persistTableState();
                     updateModelsBtnLabel();
                     renderTable();
                     updateTableHighlight(true);
