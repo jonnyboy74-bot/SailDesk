@@ -412,7 +412,8 @@ def get_config_js():
 
 @app.get("/")
 def get_interface():
-    return FileResponse("index_v3.html")
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/weather")
 
 @app.get("/weather")
 def get_weather():
